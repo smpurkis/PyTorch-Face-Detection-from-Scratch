@@ -1,3 +1,4 @@
+from multiprocessing import cpu_count
 from pathlib import Path
 
 import gdown
@@ -5,6 +6,7 @@ import pytorch_lightning as pl
 import torch
 from PIL import ImageDraw
 from torch.utils.data import DataLoader
+from torchvision import transforms
 
 from datasets.WIDERFace.dataset import WIDERFaceDataset
 
@@ -29,12 +31,15 @@ dataset_links = {
 
 
 class WIDERFaceDataModule(pl.LightningDataModule):
-    def __init__(self, root_dir: str = "./", batch_size: int = 32, shuffle: bool = False):
+    def __init__(self, root_dir: str = "./", resize_shape=(320, 320), num_of_patches: int = 20, batch_size: int = 8,
+                 shuffle: bool = False):
         super().__init__()
         self.root_dir = root_dir
         self.data_dir = Path(self.root_dir, "data")
+        self.resize_shape = resize_shape
         self.batch_size = batch_size
         self.shuffle = shuffle
+        self.num_of_patches = num_of_patches
 
     def data_folder(self, output, zipfile: bool = False):
         return Path(self.data_dir, output if zipfile else Path(output).stem)
@@ -90,19 +95,64 @@ class WIDERFaceDataModule(pl.LightningDataModule):
             target["bbx"] = torch.tensor(target["bbx"])
         return targets
 
+    def default_transform(self):
+        default_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize(size=self.resize_shape)
+        ])
+        return default_transform
+
     def setup(self, stage=None):
-        self.train_dataset = WIDERFaceDataset(self.data_dir, split="train", targets=self.get_targets(split="train"))
-        self.val_dataset = WIDERFaceDataset(self.data_dir, split="val", targets=self.get_targets(split="val"))
-        self.test_dataset = WIDERFaceDataset(self.data_dir, split="test")
+        self.train_dataset = WIDERFaceDataset(
+            data_dir=self.data_dir,
+            split="train",
+            num_of_patches=self.num_of_patches,
+            transform=self.default_transform(),
+            targets=self.get_targets(split="train")
+        )
+        self.val_dataset = WIDERFaceDataset(
+            data_dir=self.data_dir,
+            split="val",
+            num_of_patches=self.num_of_patches,
+            transform=self.default_transform(),
+            targets=self.get_targets(split="val")
+        )
+        self.test_dataset = WIDERFaceDataset(
+            data_dir=self.data_dir,
+            split="test",
+            num_of_patches=self.num_of_patches,
+            transform=self.default_transform(),
+        )
+
+    def my_collate(self, batch):
+        data = torch.stack([item[0] for item in batch])
+        target = [item[1] for item in batch]
+        return [data, target]
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle)
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=self.shuffle,
+            collate_fn=self.my_collate,
+            num_workers=cpu_count()
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size)
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.batch_size,
+            collate_fn=self.my_collate,
+            num_workers=cpu_count()
+        )
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size)
+        return DataLoader(
+            self.test_dataset,
+            batch_size=self.batch_size,
+            collate_fn=self.my_collate,
+            num_workers=cpu_count()
+        )
 
     def teardown(self, stage=None):
         pass
