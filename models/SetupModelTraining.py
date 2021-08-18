@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch
 
 from pytorch_lightning import LightningModule
@@ -33,14 +35,15 @@ class SetupModelTraining(LightningModule):
                 larger_bbx[:l, 2] ** 0.5 - smaller_bbx[:, 2] ** 0.5))
         return loss
 
-    def calculate_loss(self, pred_bbx, gt_bbx):
+    def calculate_loss(self, num_boxes, pred_bbx, gt_bbx):
         l = min(pred_bbx.size(0), gt_bbx.size(0))
+        loss = (num_boxes - len(gt_bbx))**2
         if gt_bbx.size(0) <= pred_bbx.size(0):
-            loss = self.weighted_sums(pred_bbx, gt_bbx, l)
+            loss += self.weighted_sums(pred_bbx, gt_bbx, l)
         else:
-            loss = self.weighted_sums(gt_bbx, pred_bbx, l)
+            loss += self.weighted_sums(gt_bbx, pred_bbx, l)
 
-        # loss = box_iou(pred_bbx[:, 1:5], gt_bbx[:, 1:5])
+        # loss = -box_iou(pred_bbx[:, 1:5], gt_bbx[:, 1:5])
         loss = torch.sum(loss)
         return loss
 
@@ -49,7 +52,8 @@ class SetupModelTraining(LightningModule):
         y = batch[1]
         y_hat = self.forward(x)
 
-        loss = torch.sum(torch.stack([self.calculate_loss(pred_bbx=y_hat[idx], gt_bbx=bbx) for idx, bbx in enumerate(y)]), dim=0)
+        #y_hat[0][0].size(0) == 0
+        loss = torch.sum(torch.stack([self.calculate_loss(num_boxes=y_hat[1][idx] , pred_bbx=y_hat[0][idx], gt_bbx=bbx) for idx, bbx in enumerate(y)]), dim=0)
         loss = loss / len(y)
 
         step_outputs = {
@@ -73,6 +77,10 @@ class SetupModelTraining(LightningModule):
         self.log("loss", loss, prog_bar=True, logger=True)
         print(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']}", end=" ")
         print(f"{'Training' if training else 'Validation'}, loss: {epoch_metrics['loss']:5.3f}", end=" ")
+        out = Path("out.log")
+        with out.open("a") as fp:
+            fp.write(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']}")
+            fp.write(f"{'Training' if training else 'Validation'}, loss: {epoch_metrics['loss']:5.3f}")
         return epoch_metrics
 
     def training_epoch_end(self, training_epoch_outputs):

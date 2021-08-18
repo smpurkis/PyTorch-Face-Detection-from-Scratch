@@ -1,11 +1,10 @@
 import torch
-
 from pytorch_lightning import Trainer
 
-if __name__ == '__main__':
-    from models import BaseModel, SetupModelTraining
-    from datasets.WIDERFace import WIDERFaceDataModule
+from datasets.WIDERFace import WIDERFaceDataModule
+from models import BaseModel, SetupModelTraining
 
+if __name__ == '__main__':
     model = BaseModel(
         filters=64,
         input_shape=(3, 320, 320),
@@ -14,7 +13,7 @@ if __name__ == '__main__':
     )
     model_setup = SetupModelTraining(
         model=model,
-        lr=1e-4
+        lr=1e-5
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainer = Trainer(

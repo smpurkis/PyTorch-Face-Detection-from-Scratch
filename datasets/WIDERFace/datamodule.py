@@ -31,12 +31,12 @@ dataset_links = {
 
 
 class WIDERFaceDataModule(pl.LightningDataModule):
-    def __init__(self, root_dir: str = "./", resize_shape=(320, 320), num_of_patches: int = 20, batch_size: int = 8,
+    def __init__(self, root_dir: str = "./", input_shape=(320, 320), num_of_patches: int = 20, batch_size: int = 8,
                  shuffle: bool = False):
         super().__init__()
         self.root_dir = root_dir
         self.data_dir = Path(self.root_dir, "data")
-        self.resize_shape = resize_shape
+        self.input_shape = input_shape
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.num_of_patches = num_of_patches
@@ -98,7 +98,7 @@ class WIDERFaceDataModule(pl.LightningDataModule):
     def default_transform(self):
         default_transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize(size=self.resize_shape)
+            transforms.Resize(size=self.input_shape)
         ])
         return default_transform
 
@@ -108,6 +108,7 @@ class WIDERFaceDataModule(pl.LightningDataModule):
             split="train",
             num_of_patches=self.num_of_patches,
             transform=self.default_transform(),
+            input_shape=self.input_shape,
             targets=self.get_targets(split="train")
         )
         self.val_dataset = WIDERFaceDataset(
@@ -115,12 +116,14 @@ class WIDERFaceDataModule(pl.LightningDataModule):
             split="val",
             num_of_patches=self.num_of_patches,
             transform=self.default_transform(),
+            input_shape=self.input_shape,
             targets=self.get_targets(split="val")
         )
         self.test_dataset = WIDERFaceDataset(
             data_dir=self.data_dir,
             split="test",
             num_of_patches=self.num_of_patches,
+            input_shape=self.input_shape,
             transform=self.default_transform(),
         )
 
@@ -159,7 +162,10 @@ class WIDERFaceDataModule(pl.LightningDataModule):
 
 
 if __name__ == '__main__':
-    dm = WIDERFaceDataModule("/home/sam/PycharmProjects/python/PyTorch-Face-Detection-from-Scratch")
+    dm = WIDERFaceDataModule(
+        "/home/sam/PycharmProjects/python/PyTorch-Face-Detection-from-Scratch",
+        num_of_patches=300
+    )
     dm.setup()
     x, y = dm.train_dataset[2]
     draw = dm.draw_bbx(x, y)
