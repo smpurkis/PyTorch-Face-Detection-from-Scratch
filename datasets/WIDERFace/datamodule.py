@@ -4,11 +4,11 @@ from pathlib import Path
 import gdown
 import pytorch_lightning as pl
 import torch
-from PIL import ImageDraw
 from torch.utils.data import DataLoader
 from torchvision import transforms
-
+import tqdm
 from datasets.WIDERFace.dataset import WIDERFaceDataset
+from datasets.utils import draw_bbx
 
 dataset_links = {
     "train": {
@@ -31,7 +31,7 @@ dataset_links = {
 
 
 class WIDERFaceDataModule(pl.LightningDataModule):
-    def __init__(self, root_dir: str = "./", input_shape=(320, 320), num_of_patches: int = 20, batch_size: int = 8,
+    def __init__(self, root_dir: str = "./", input_shape=(320, 240), num_of_patches: int = 20, batch_size: int = 8,
                  shuffle: bool = False):
         super().__init__()
         self.root_dir = root_dir
@@ -58,16 +58,6 @@ class WIDERFaceDataModule(pl.LightningDataModule):
                     postprocess=gdown.extractall
                 )
 
-    @staticmethod
-    def convert_bbx_to_xyxy(bbx):
-        return bbx[1], bbx[2], bbx[1] + bbx[3], bbx[2] + bbx[4]
-
-    def draw_bbx(self, img, bbx):
-        draw = ImageDraw.Draw(img)
-        for b in bbx:
-            draw.rectangle(WIDERFaceDataModule().convert_bbx_to_xyxy(b), outline="blue", width=2)
-        return draw
-
     def get_targets(self, split: str = "train"):
         assert self.check_folder_and_zip_exist(
             dataset_links["target"]["output"]), "Target files/folder is missing, please download it!"
@@ -93,12 +83,14 @@ class WIDERFaceDataModule(pl.LightningDataModule):
         targets.append(target)
         for target in targets:
             target["bbx"] = torch.tensor(target["bbx"])
+        targets = [t for t in targets if t["bbx"].size(0) < 3]
         return targets
 
     def default_transform(self):
         default_transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize(size=self.input_shape)
+            transforms.Resize(size=(self.input_shape[1], self.input_shape[0])),
+            # transforms.Normalize(mean=1, std=1)
         ])
         return default_transform
 
@@ -129,8 +121,10 @@ class WIDERFaceDataModule(pl.LightningDataModule):
 
     def my_collate(self, batch):
         data = torch.stack([item[0] for item in batch])
-        target = [item[1] for item in batch]
-        return [data, target]
+        target = torch.stack([item[1] for item in batch])
+        gt_bbx = [item[2] for item in batch]
+        # target = [item[1] for item in batch]
+        return [data, target, gt_bbx]
 
     def train_dataloader(self):
         return DataLoader(
@@ -162,12 +156,17 @@ class WIDERFaceDataModule(pl.LightningDataModule):
 
 
 if __name__ == '__main__':
+    input_shape = (320, 320)
     dm = WIDERFaceDataModule(
         "/home/sam/PycharmProjects/python/PyTorch-Face-Detection-from-Scratch",
-        num_of_patches=300
+        num_of_patches=4,
+        input_shape=input_shape
     )
     dm.setup()
-    x, y = dm.train_dataset[2]
-    draw = dm.draw_bbx(x, y)
-    x.show()
+    # for i in tqdm.auto.tqdm(range(len(dm.train_dataset))):
+    #     x, y = dm.train_dataset[i]
+    x, y = dm.train_dataset[0]
+    if isinstance(x, torch.Tensor):
+        x = transforms.ToPILImage()(x)
+    draw = draw_bbx(x, y, input_shape=input_shape)
     i = 0

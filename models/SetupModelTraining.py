@@ -1,16 +1,17 @@
 from pathlib import Path
 
 import torch
-
 from pytorch_lightning import LightningModule
 from torchvision.ops import box_iou
-import torch.nn as nn
+
+from datasets.utils import draw_bbx
+from losses.YoloLoss import YoloLoss
+
 
 class SetupModelTraining(LightningModule):
     def __init__(self, model, input_shape=None, lr=1e-4, pretrained=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.model = model
-        self.input_shape = input_shape
         self.lr = lr
 
     def forward(self, x):
@@ -23,64 +24,84 @@ class SetupModelTraining(LightningModule):
         # return [optimizer], [scheduler]
         return optimizer
 
-    def weighted_sums(self, larger_bbx, smaller_bbx, l):
-        loss = torch.sum(torch.abs(larger_bbx[l:, 0]))
-        loss += torch.sum(torch.abs(larger_bbx[l:, 1]) ** 2 + torch.abs(larger_bbx[l:, 2]) ** 2)
-        loss += torch.sum(torch.abs(larger_bbx[l:, 1] ** 0.5) + torch.abs(larger_bbx[l:, 2] ** 0.5))
-        if larger_bbx.size(0) > 0 and smaller_bbx.size(0) > 0:
-            loss += torch.sum(torch.abs(larger_bbx[:l, 0] - smaller_bbx[:, 0]))
-            loss += torch.sum(
-                torch.abs(larger_bbx[:l, 1] - smaller_bbx[:, 1]) ** 2 + torch.abs(larger_bbx[:l, 2] - smaller_bbx[:, 2]) ** 2)
-            loss += torch.sum(torch.abs(larger_bbx[:l, 1] ** 0.5 - smaller_bbx[:, 1] ** 0.5) + torch.abs(
-                larger_bbx[:l, 2] ** 0.5 - smaller_bbx[:, 2] ** 0.5))
-        return loss
-
-    def calculate_loss(self, num_boxes, pred_bbx, gt_bbx):
-        l = min(pred_bbx.size(0), gt_bbx.size(0))
-        loss = (num_boxes - len(gt_bbx))**2
-        if gt_bbx.size(0) <= pred_bbx.size(0):
-            loss += self.weighted_sums(pred_bbx, gt_bbx, l)
-        else:
-            loss += self.weighted_sums(gt_bbx, pred_bbx, l)
-
-        # loss = -box_iou(pred_bbx[:, 1:5], gt_bbx[:, 1:5])
-        loss = torch.sum(loss)
-        return loss
-
-    def step(self, batch):
-        x = batch[0]
-        y = batch[1]
+    def step(self, batch, batch_idx, validation=False):
+        x, y, gt_bbx = batch
         y_hat = self.forward(x)
 
-        #y_hat[0][0].size(0) == 0
-        loss = torch.sum(torch.stack([self.calculate_loss(num_boxes=y_hat[1][idx] , pred_bbx=y_hat[0][idx], gt_bbx=bbx) for idx, bbx in enumerate(y)]), dim=0)
+        # y_hat[0][0].size(0) == 0
+        loss_fn = YoloLoss(non_max_suppression_fn=self.model.reduce_bounding_boxes.convert_batch_bbx_to_xyxy_scaled)
+        loss = 0
+
+        if batch_idx == 0 and self.current_epoch % 2 == 0:
+            # gt_bbx_check = self.model.non_max_suppression(y)
+            pred_bbx = self.model.non_max_suppression(y_hat)
+            test_img = x[0]
+            test_gt = gt_bbx[0]
+            test_pred = pred_bbx[0]
+            draw_bbx(
+                img=test_img,
+                bbx=test_pred,
+                input_shape=self.model.input_shape,
+                save_name=f"{'validation' if validation else 'train'}_epoch_{self.current_epoch}"
+            )
+            # draw_bbx(
+            #     img=test_img,
+            #     bbx=test_gt,
+            #     input_shape=self.model.input_shape,
+            #     save_name=f"{'validation' if validation else 'train'}_epoch_{self.current_epoch}"
+            # )
+            i = 0
+        total_iou = 0.0
+        for i in range(y.shape[0]):
+            predicted_boxes = y_hat[i]
+            ground_truth_boxes = y[i]
+            loss += loss_fn(predicted_boxes, ground_truth_boxes)
+
+            # gt_bbx = self.model.reduce_bounding_boxes.convert_batch_bbx_to_xyxy_scaled(ground_truth_boxes).reshape(5, -1)[1:].permute(1, 0)
+            # pred_bbx = self.model.reduce_bounding_boxes.convert_batch_bbx_to_xyxy_scaled(predicted_boxes).reshape(5, -1)[1:].permute(1, 0)
+            gt_bbx = self.model.reduce_bounding_boxes(ground_truth_boxes).reshape(5, -1)[1:].permute(1, 0)
+            pred_bbx = self.model.reduce_bounding_boxes(predicted_boxes).reshape(5, -1)[1:].permute(1, 0)
+
+            if pred_bbx.shape[0] > 1:
+                gt_bbx[:, 2] = gt_bbx[:, 2] + gt_bbx[:, 0]
+                gt_bbx[:, 3] = gt_bbx[:, 3] + gt_bbx[:, 1]
+
+                pred_bbx[:, 2] = pred_bbx[:, 2] + pred_bbx[:, 0]
+                pred_bbx[:, 3] = pred_bbx[:, 3] + pred_bbx[:, 1]
+                iou = torch.nan_to_num(box_iou(gt_bbx, pred_bbx), 0)
+                total_iou += torch.sum(iou)
         loss = loss / len(y)
+        if torch.isnan(loss):
+            print(i)
 
         step_outputs = {
-            "loss": loss
+            "loss": loss,
+            "total_iou": total_iou
         }
         self.log("step_loss", loss, prog_bar=True, logger=True)
         return step_outputs
 
     def training_step(self, batch, batch_idx):
-        step_outputs = self.step(batch)
+        step_outputs = self.step(batch, batch_idx)
         return step_outputs
 
     def validation_step(self, batch, batch_idx):
-        step_outputs = self.step(batch)
+        step_outputs = self.step(batch, batch_idx, validation=True)
         return step_outputs
 
     def format_metrics(self, epoch_outputs, training=True):
         epoch_metrics = {}
         loss = torch.mean(torch.tensor([e["loss"] for e in epoch_outputs]))
         epoch_metrics["loss"] = loss
+        total_iou = torch.mean(torch.tensor([e["total_iou"] for e in epoch_outputs]))
+        epoch_metrics["total_iou"] = total_iou
         self.log("loss", loss, prog_bar=True, logger=True)
         print(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']}", end=" ")
-        print(f"{'Training' if training else 'Validation'}, loss: {epoch_metrics['loss']:5.3f}", end=" ")
+        print(f"\n{'Training' if training else 'Validation'}, loss: {epoch_metrics['loss']:5.3f}", end=" ")
         out = Path("out.log")
         with out.open("a") as fp:
             fp.write(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']}")
-            fp.write(f"{'Training' if training else 'Validation'}, loss: {epoch_metrics['loss']:5.3f}")
+            fp.write(f"\n{'Training' if training else 'Validation'}, loss: {epoch_metrics['loss']:5.3f}, iou: {epoch_metrics['total_iou']:5.3f}")
         return epoch_metrics
 
     def training_epoch_end(self, training_epoch_outputs):

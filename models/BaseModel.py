@@ -1,9 +1,9 @@
-import math
-
 import torch
 import torch.nn as nn
+import torchvision.models
 from torchinfo import summary
-from torchvision.ops import nms
+
+from datasets.utils import ReduceBoundingBoxes
 
 
 class ResidualBlock(nn.Module):
@@ -37,55 +37,9 @@ class ResidualBlock(nn.Module):
         return x
 
 
-class ReduceBoundingBoxes(nn.Module):
-    def __init__(self, probability_threshold: float = 0.9, iou_threshold: float = 0.5, input_shape=(3, 320, 240),
-                 num_of_patches=40):
-        super().__init__()
-        self.probability_threshold = probability_threshold
-        self.iou_threshold = iou_threshold
-        self.input_shape = input_shape
-        _, self.width, self.height = input_shape
-        self.x_patch_size = math.floor(self.width / num_of_patches)
-        self.y_patch_size = math.floor(self.height / num_of_patches)
-
-    def remove_low_probabilty_bbx(self, x):
-        i, j = torch.where(x[0] > self.probability_threshold)
-        if len(i) == 0 and len(j) == 0:
-            return torch.empty([0]), False
-        bbx = x[:, i, j].permute(1, 0)
-        # bbx[:, 2] = bbx[:, 0] + bbx[:, 2]
-        # bbx[:, 3] = bbx[:, 1] + bbx[:, 3]
-        return bbx, True
-
-    def convert_batch_bbx_to_xyxy_scaled(self, x):
-        i, j = torch.where(x[0] > self.probability_threshold)
-        x[3, i, j] = (x[3, i, j] - x[1, i, j]) * self.width + i * self.x_patch_size
-        x[4, i, j] = (x[4, i, j] - x[2, i, j]) * self.height + j * self.y_patch_size
-        x[1, i, j] = x[1, i, j] * self.width + i * self.x_patch_size
-        x[2, i, j] = x[2, i, j] * self.height + j * self.y_patch_size
-        return x
-
-    def convert_batch_to_xywh(self, x):
-        x[:, 3] = x[:, 3] - x[:, 1]
-        x[:, 4] = x[:, 4] - x[:, 2]
-        return x
-
-    def forward(self, x):
-        x = self.convert_batch_bbx_to_xyxy_scaled(x)
-        x, boxes_exist = self.remove_low_probabilty_bbx(x)
-        if boxes_exist:
-            bbx = x[:, 1:]
-            scores = x[:, 0]
-            bbxis = nms(boxes=bbx, scores=scores, iou_threshold=self.iou_threshold)
-            out = self.convert_batch_to_xywh(x[bbxis])
-            return out
-        else:
-            return torch.empty(0)
-
-
 class BaseModel(nn.Module):
     def __init__(self, filters, input_shape, num_of_patches=16, num_of_residual_blocks=10, probability_threshold=0.5,
-                 iou_threshold=0.5):
+                 iou_threshold=0.1):
         super().__init__()
         self.input_shape = input_shape
         self.num_of_patches = num_of_patches
@@ -93,59 +47,95 @@ class BaseModel(nn.Module):
             f"Input shape {input_shape} cannot be divided into {num_of_patches} patches"
         self.probability_threshold = probability_threshold
         self.iou_threshold = iou_threshold
-        self.conv1 = nn.Conv2d(
-            in_channels=3,
-            out_channels=filters,
+        # self.conv1 = nn.Conv2d(
+        #     in_channels=input_shape[0],
+        #     out_channels=filters,
+        #     kernel_size=(3, 3),
+        #     padding="same"
+        # )
+        # self.residual_blocks = nn.Sequential(
+        #     *[ResidualBlock(
+        #         filters=filters,
+        #         num_of_patches=self.num_of_patches
+        #     ) for _ in range(num_of_residual_blocks)]
+        # )
+        # self.out = nn.Conv2d(
+        #     in_channels=filters,
+        #     out_channels=5,
+        #     kernel_size=(3, 3),
+        #     padding="same"
+        # )
+        self.out = nn.LazyConv2d(
+            out_channels=4*filters,
+            stride=2,
             kernel_size=(3, 3),
-            padding="same"
+            padding=1
         )
-        self.residual_blocks = nn.Sequential(
-            *[ResidualBlock(
-                filters=filters,
-                num_of_patches=self.num_of_patches
-            ) for _ in range(num_of_residual_blocks)]
-        )
-        self.out = nn.Conv2d(
-            in_channels=filters,
-            out_channels=5,
-            kernel_size=(3, 3),
-            padding="same"
-        )
+        self.leaky_relu = nn.LeakyReLU(0.2)
+        self.linear1 = nn.LazyLinear(5 * num_of_patches ** 2)
+        self.linear = nn.LazyLinear(5 * num_of_patches ** 2)
         self.reduce_bounding_boxes = ReduceBoundingBoxes(
             probability_threshold=probability_threshold,
             iou_threshold=iou_threshold,
-            input_shape=self.input_shape
+            input_shape=self.input_shape,
+            num_of_patches=self.num_of_patches
         )
+        self.feature_extractor = nn.Sequential(*[l for l in list(torchvision.models.resnet50(pretrained=True).children())[:-2]])
+        # for param in self.feature_extractor.parameters():
+        #     param.requires_grad = False
+        self.dropout = nn.Dropout(0.75)
+        self.dropout2d = nn.Dropout2d(0.75)
 
     def summary(self):
         if self.input_shape is None:
             raise Exception("Please set 'self.input_shape'")
         else:
+            self(torch.rand((1, *self.input_shape)).cuda())
             print(summary(self, (1, *self.input_shape)))
 
+    def non_max_suppression(self, x):
+        if len(x.shape) == 4:
+            return [self.reduce_bounding_boxes(xi) for xi in x[:]]
+        else:
+            return self.reduce_bounding_boxes(x)
+
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.residual_blocks(x)
+        # x = self.conv1(x)
+        # x = self.residual_blocks(x)
+        x = self.feature_extractor(x)
+        x = self.dropout2d(x)
         x = self.out(x)
+        x = self.leaky_relu(x)
+        x = self.dropout2d(x)
+        # x = nn.Sigmoid()(x)
+        x = nn.Flatten()(x)
+        x = self.linear1(x)
+        x = self.dropout(x)
+        x = self.linear(x).reshape(-1, 5, self.num_of_patches, self.num_of_patches)
         x = nn.Sigmoid()(x)
+        # x = torch.abs(x)
         # s = [self.reduce_bounding_boxes(xi) for xi in x[:]]
         return x
 
 
 if __name__ == '__main__':
-    input_shape = (3, 640, 480)
+    input_shape = (320, 320)
     bm = BaseModel(
         filters=64,
-        input_shape=input_shape,
-        num_of_patches=20,
+        input_shape=(3, *input_shape),
+        num_of_patches=2,
         num_of_residual_blocks=10
     ).cuda()
-    t = torch.cat([torch.rand(1, *input_shape) for _ in range(10)], 0).cuda()
+    bm.eval()
+    bm.summary()
+    t = torch.rand(1, *(3, *input_shape)).cuda()
     from time import time
 
     s = time()
     p = bm(t)
-    print(time() - s)
+    s = time() - s
+    fps = 1/s
+    print(s, fps)
     print(p.shape)
     # bm.summary()
     # i = 0
