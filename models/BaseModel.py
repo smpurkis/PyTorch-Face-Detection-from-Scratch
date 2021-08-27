@@ -38,8 +38,8 @@ class ResidualBlock(nn.Module):
 
 
 class BaseModel(nn.Module):
-    def __init__(self, filters, input_shape, num_of_patches=16, num_of_residual_blocks=10, probability_threshold=0.5,
-                 iou_threshold=0.1):
+    def __init__(self, filters, input_shape, num_of_patches=16, num_of_residual_blocks=10, probability_threshold=0.1,
+                 iou_threshold=0.5):
         super().__init__()
         self.input_shape = input_shape
         self.num_of_patches = num_of_patches
@@ -66,13 +66,13 @@ class BaseModel(nn.Module):
         #     padding="same"
         # )
         self.out = nn.LazyConv2d(
-            out_channels=4*filters,
+            out_channels=5 * filters,
             stride=2,
-            kernel_size=(3, 3),
-            padding=1
+            kernel_size=(5, 5),
+            padding=2
         )
         self.leaky_relu = nn.LeakyReLU(0.2)
-        self.linear1 = nn.LazyLinear(5 * num_of_patches ** 2)
+        # self.linear1 = nn.LazyLinear(5 * num_of_patches ** 2)
         self.linear = nn.LazyLinear(5 * num_of_patches ** 2)
         self.reduce_bounding_boxes = ReduceBoundingBoxes(
             probability_threshold=probability_threshold,
@@ -80,7 +80,7 @@ class BaseModel(nn.Module):
             input_shape=self.input_shape,
             num_of_patches=self.num_of_patches
         )
-        self.feature_extractor = nn.Sequential(*[l for l in list(torchvision.models.resnet50(pretrained=True).children())[:-2]])
+        self.feature_extractor = nn.Sequential(*[l for l in list(torchvision.models.resnet18(pretrained=True).children())[:-2]])
         # for param in self.feature_extractor.parameters():
         #     param.requires_grad = False
         self.dropout = nn.Dropout(0.75)
@@ -100,6 +100,7 @@ class BaseModel(nn.Module):
             return self.reduce_bounding_boxes(x)
 
     def forward(self, x):
+        bs = x.size(0)
         # x = self.conv1(x)
         # x = self.residual_blocks(x)
         x = self.feature_extractor(x)
@@ -109,9 +110,9 @@ class BaseModel(nn.Module):
         x = self.dropout2d(x)
         # x = nn.Sigmoid()(x)
         x = nn.Flatten()(x)
-        x = self.linear1(x)
-        x = self.dropout(x)
-        x = self.linear(x).reshape(-1, 5, self.num_of_patches, self.num_of_patches)
+        # x = self.linear1(x)
+        # x = self.dropout(x)
+        x = self.linear(x).reshape(bs, 5, self.num_of_patches, self.num_of_patches)
         x = nn.Sigmoid()(x)
         # x = torch.abs(x)
         # s = [self.reduce_bounding_boxes(xi) for xi in x[:]]

@@ -132,7 +132,7 @@ class WIDERFaceDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=self.shuffle,
             collate_fn=self.my_collate,
-            num_workers=cpu_count()
+            num_workers=cpu_count()//2
         )
 
     def val_dataloader(self):
@@ -140,7 +140,7 @@ class WIDERFaceDataModule(pl.LightningDataModule):
             self.val_dataset,
             batch_size=self.batch_size,
             collate_fn=self.my_collate,
-            num_workers=cpu_count()
+            num_workers=cpu_count()//2
         )
 
     def test_dataloader(self):
@@ -148,7 +148,7 @@ class WIDERFaceDataModule(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             collate_fn=self.my_collate,
-            num_workers=cpu_count()
+            num_workers=cpu_count()//2
         )
 
     def teardown(self, stage=None):
@@ -159,7 +159,7 @@ if __name__ == '__main__':
     input_shape = (320, 320)
     dm = WIDERFaceDataModule(
         "/home/sam/PycharmProjects/python/PyTorch-Face-Detection-from-Scratch",
-        num_of_patches=4,
+        num_of_patches=1,
         input_shape=input_shape
     )
     dm.setup()
@@ -168,5 +168,5 @@ if __name__ == '__main__':
     x, y = dm.train_dataset[0]
     if isinstance(x, torch.Tensor):
         x = transforms.ToPILImage()(x)
-    draw = draw_bbx(x, y, input_shape=input_shape)
+    draw = draw_bbx(x, y, input_shape=input_shape, show=True)
     i = 0

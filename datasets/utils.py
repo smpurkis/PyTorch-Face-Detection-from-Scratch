@@ -27,13 +27,23 @@ class ReduceBoundingBoxes(nn.Module):
         # bbx[:, 3] = bbx[:, 1] + bbx[:, 3]
         return bbx, True
 
-    def convert_batch_bbx_to_xyxy_scaled(self, x):
+    def scale_batch_bbx_xywh(self, x):
+        i, j = torch.where(x[0] > self.probability_threshold)
+        x = x.float()
+        scaled_x = torch.clone(x).float()
+        scaled_x[1, i, j] = x[1, i, j] * self.x_patch_size + i * self.x_patch_size
+        scaled_x[2, i, j] = x[2, i, j] * self.y_patch_size + j * self.y_patch_size
+        scaled_x[3, i, j] = x[3, i, j] * self.width
+        scaled_x[4, i, j] = x[4, i, j] * self.height
+        return scaled_x
+
+    def scale_batch_bbx(self, x):
         i, j = torch.where(x[0] > self.probability_threshold)
         scaled_x = torch.clone(x).float()
         scaled_x[1, i, j] = x[1, i, j] * self.x_patch_size + i * self.x_patch_size
         scaled_x[2, i, j] = x[2, i, j] * self.y_patch_size + j * self.y_patch_size
-        scaled_x[3, i, j] = x[3, i, j] * self.width + i * self.x_patch_size
-        scaled_x[4, i, j] = x[4, i, j] * self.height + j * self.y_patch_size
+        scaled_x[3, i, j] = x[3, i, j] * self.x_patch_size + i * self.x_patch_size
+        scaled_x[4, i, j] = x[4, i, j] * self.y_patch_size + j * self.y_patch_size
         return scaled_x
 
     def convert_batch_to_xywh(self, x):
@@ -41,30 +51,23 @@ class ReduceBoundingBoxes(nn.Module):
         x[:, 4] = x[:, 4] - x[:, 2]
         return x
 
-    def convert_bbx_to_xyxy(self, x, i, j):
-        return torch.tensor(
-            [x[0],
-             x[1] * self.width + i * self.x_patch_size,
-             x[2] * self.height + j * self.y_patch_size,
-             x[3] * self.width + i * self.x_patch_size,
-             x[4] * self.height + j * self.y_patch_size]
-        )
+    def convert_batch_to_xyxy(self, x):
+        x[:, 3] = x[:, 3] + x[:, 1]
+        x[:, 4] = x[:, 4] + x[:, 2]
+        return x
 
     def forward(self, x):
-        # x2 = torch.clone(x)
-        # x2 = x
-        # for i in range(x2.shape[1]):
-        #     for j in range(x2.shape[2]):
-        #         if x2[0, i, j] > 0:
-        #             x2[:, i, j] = self.convert_bbx_to_xyxy(x2[:, i, j], i, j)
-        x = self.convert_batch_bbx_to_xyxy_scaled(x) # tensor([[  1.0000, 114.3750,  40.4598, 215.3125, 144.0974]])
+        x = self.scale_batch_bbx_xywh(x)
+        # x = self.scale_batch_bbx(x)
         x, boxes_exist = self.remove_low_probabilty_bbx(x)
         if boxes_exist:
+            x = self.convert_batch_to_xyxy(x)
             bbx = torch.round(x[:, 1:])
             scores = x[:, 0]
             bbxis = nms(boxes=bbx, scores=scores, iou_threshold=self.iou_threshold)
             x = torch.cat([scores.view(-1, 1), bbx], dim=1)
             out = self.convert_batch_to_xywh(x[bbxis])
+            # out = x[bbxis]
             return out
         else:
             return torch.empty(0)
@@ -74,7 +77,7 @@ def convert_bbx_to_xyxy(bbx):
     return bbx[0], bbx[1], bbx[0] + bbx[2], bbx[1] + bbx[3]
 
 
-def draw_bbx(img, bbx, input_shape=(320, 240), save_name="image"):
+def draw_bbx(img, bbx, input_shape=(320, 240), save_name="image", show=False):
     if len(bbx.shape) == 3:
         num_of_patches = bbx.shape[1]
         reduce_bounding_boxes = ReduceBoundingBoxes(0.9, 0.5, (3, *input_shape), num_of_patches)
@@ -87,7 +90,12 @@ def draw_bbx(img, bbx, input_shape=(320, 240), save_name="image"):
             width = 1
         else:
             width = 3
-        draw.rectangle(convert_bbx_to_xyxy(b[1:]), outline="blue", width=width)
-    # img.show()
-    img.save(f"imgs/{save_name}.png")
+        bbx = convert_bbx_to_xyxy(b[1:])
+        draw.rectangle(bbx, outline="blue", width=width)
+        # bbx = b[1:]
+        # draw.rectangle(bbx.detach().cpu().numpy(), outline="blue", width=width)
+    if show:
+        img.show()
+    else:
+        img.save(f"imgs/{save_name}.png")
     return draw

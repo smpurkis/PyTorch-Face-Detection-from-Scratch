@@ -2,7 +2,7 @@ import torch
 from pytorch_lightning import Trainer
 
 from datasets.WIDERFace import WIDERFaceDataModule
-from models import BaseModel, SetupModelTraining
+from models import BaseModel, ModelMeta
 
 if __name__ == '__main__':
     checkpoint = torch.load("lightning_logs/version_208/checkpoints/epoch=50-step=10250.ckpt")
@@ -16,7 +16,7 @@ if __name__ == '__main__':
         num_of_residual_blocks=10
     ).cuda()
     model.summary()
-    model_setup = SetupModelTraining(
+    model_setup = ModelMeta(
         model=model,
         lr=1e-4
     )

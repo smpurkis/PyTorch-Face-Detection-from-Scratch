@@ -20,7 +20,7 @@ class WIDERFaceDataset(Dataset):
 
     def __len__(self):
         # return 2
-        return len(self.targets)//4
+        return len(self.targets)
 
     def convert_bbx_to_feature_map(self, bbx, img_size):
         feature_map = fm = torch.zeros((5, self.num_of_patches, self.num_of_patches))
@@ -33,16 +33,13 @@ class WIDERFaceDataset(Dataset):
             i, j = math.floor(bx[1] / x_patch_size), math.floor(bx[2] / y_patch_size)
 
             # Calculate the x0, y0, x1, y1 coordinates relative to the top left corner of its containing ij box
-            normalized_bx = torch.tensor([
-                bx[0],
-                bx[1],
-                bx[2],
-                (bx[1] + bx[3]),
-                (bx[2] + bx[4]),
-            ])
+            # normalized_bx = self.convert_to_xyxy(bx)
+            normalized_bx = torch.clone(bx)
 
-            normalized_bx[[1, 3]] = normalized_bx[[1, 3]] - i * x_patch_size
-            normalized_bx[[2, 4]] = normalized_bx[[2, 4]] - j * y_patch_size
+            # normalized_bx[[1, 3]] = normalized_bx[[1, 3]] - i * x_patch_size
+            # normalized_bx[[2, 4]] = normalized_bx[[2, 4]] - j * y_patch_size
+            normalized_bx[1] = normalized_bx[1] - i * x_patch_size
+            normalized_bx[2] = normalized_bx[2] - j * y_patch_size
 
             # Normalize by the size of the image
             normalized_bx[1] = normalized_bx[1] / x_patch_size
@@ -50,11 +47,21 @@ class WIDERFaceDataset(Dataset):
 
             normalized_bx[3] = normalized_bx[3] / width
             normalized_bx[4] = normalized_bx[4] / height
+            # normalized_bx[3] = normalized_bx[3] / x_patch_size
+            # normalized_bx[4] = normalized_bx[4] / y_patch_size
 
-            i = min(max(i, 0), self.num_of_patches-1)
-            j = min(max(j, 0), self.num_of_patches-1)
+            i = min(max(i, 0), self.num_of_patches - 1)
+            j = min(max(j, 0), self.num_of_patches - 1)
             fm[:, i, j] = normalized_bx
         return feature_map
+
+    def convert_to_xyxy(self, x):
+        if len(x.shape) == 2:
+            x[:, 3] = x[:, 3] + x[:, 1]
+            x[:, 4] = x[:, 4] + x[:, 2]
+        else:
+            x = torch.tensor([x[0], x[1], x[2], x[3] + x[1], x[4] + x[2]])
+        return x
 
     def __getitem__(self, index):
         target = self.targets[index]
@@ -65,24 +72,24 @@ class WIDERFaceDataset(Dataset):
         if self.transform:
             img = self.transform(img_og)
 
+        # bbx = self.convert_batch_to_xywh(target["bbx"])
         bbx = target["bbx"]
         # if index == 0:
         bbx2 = torch.clone(bbx)
         bbx2[:, [1, 3]] = torch.round(bbx2[:, [1, 3]] * self.input_shape[0] / original_img_size[0])
         bbx2[:, [2, 4]] = torch.round(bbx2[:, [2, 4]] * self.input_shape[1] / original_img_size[1])
-        # print(bbx2)
-        # draw_bbx(img, bbx2, self.input_shape)
+        # draw_bbx(img, bbx2, self.input_shape, show=True)
         # draw_bbx(img_og, bbx, original_img_size)
 
         fm = self.convert_bbx_to_feature_map(bbx, original_img_size)
-        # draw_bbx(img_og, fm, original_img_size)
+        # draw_bbx(img_og, fm, original_img_size, show=True)
 
-        # reduce_bounding_boxes = ReduceBoundingBoxes(0.5, 0.1, (3, *self.input_shape), self.num_of_patches)
-        # s = reduce_bounding_boxes(torch.clone(fm))
-        # draw_bbx(img, s, self.input_shape)
+        reduce_bounding_boxes = ReduceBoundingBoxes(0.5, 0.1, (3, *original_img_size), self.num_of_patches)
+        s = reduce_bounding_boxes(torch.clone(fm))
+        # draw_bbx(img, s, self.input_shape, show=True)
 
-        # b = torch.sort(bbx, dim=0)
-        # bb = torch.sort(s, dim=0)
+        b = torch.sort(bbx, dim=0)
+        bb = torch.sort(s, dim=0)
         #
         # try:
         #     torch.all(b.values == bb.values)
