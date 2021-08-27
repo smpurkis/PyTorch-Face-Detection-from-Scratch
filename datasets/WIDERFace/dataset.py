@@ -1,12 +1,13 @@
 import math
 
+import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
 from datasets.utils import draw_bbx
 from models.BaseModel import ReduceBoundingBoxes
-
+from torchvision.transforms import transforms
 torch.set_printoptions(sci_mode=False)
 
 
@@ -20,7 +21,7 @@ class WIDERFaceDataset(Dataset):
 
     def __len__(self):
         # return 2
-        return len(self.targets)
+        return len(self.targets)//4
 
     def convert_bbx_to_feature_map(self, bbx, img_size):
         feature_map = fm = torch.zeros((5, self.num_of_patches, self.num_of_patches))
@@ -63,33 +64,53 @@ class WIDERFaceDataset(Dataset):
             x = torch.tensor([x[0], x[1], x[2], x[3] + x[1], x[4] + x[2]])
         return x
 
+    def convert_bbx_to_transform_format(self, bbx):
+        bbx_formatted = []
+        for b in bbx:
+            bbx_formatted.append([*b[1:].tolist(), "face"])
+        return bbx_formatted
+
+    def convert_transform_format_to_bbx(self, bbx_formatted):
+        if len(bbx_formatted) > 0:
+            bbx = torch.vstack([torch.round(torch.tensor([1.0, *b[:-1]], dtype=torch.float32)) for b in bbx_formatted])
+        else:
+            bbx = torch.tensor([])
+        return bbx
+
     def __getitem__(self, index):
         target = self.targets[index]
+        bbx_og = target["bbx"]
+        if len(torch.where(bbx_og == 0)[0]) == 4:
+            target = self.targets[index-1]
+            bbx_og = target["bbx"]
         img_path = target["img_path"]
-
         img_og = Image.open(img_path)
         original_img_size = img_og.size
+
         if self.transform:
-            img = self.transform(img_og)
+            transformed_data = self.transform(image=np.array(img_og), bboxes=self.convert_bbx_to_transform_format(bbx_og))
+        bbx = self.convert_transform_format_to_bbx(transformed_data["bboxes"])
+        img = transformed_data["image"]
+        # draw_bbx(img, bbx, show=True)
 
         # bbx = self.convert_batch_to_xywh(target["bbx"])
-        bbx = target["bbx"]
+        # bbx = target["bbx"]
         # if index == 0:
-        bbx2 = torch.clone(bbx)
-        bbx2[:, [1, 3]] = torch.round(bbx2[:, [1, 3]] * self.input_shape[0] / original_img_size[0])
-        bbx2[:, [2, 4]] = torch.round(bbx2[:, [2, 4]] * self.input_shape[1] / original_img_size[1])
+        # bbx2 = torch.clone(bbx)
+        # bbx2[:, [1, 3]] = torch.round(bbx2[:, [1, 3]] * self.input_shape[0] / original_img_size[0])
+        # bbx2[:, [2, 4]] = torch.round(bbx2[:, [2, 4]] * self.input_shape[1] / original_img_size[1])
         # draw_bbx(img, bbx2, self.input_shape, show=True)
         # draw_bbx(img_og, bbx, original_img_size)
 
         fm = self.convert_bbx_to_feature_map(bbx, original_img_size)
         # draw_bbx(img_og, fm, original_img_size, show=True)
 
-        reduce_bounding_boxes = ReduceBoundingBoxes(0.5, 0.1, (3, *original_img_size), self.num_of_patches)
-        s = reduce_bounding_boxes(torch.clone(fm))
-        # draw_bbx(img, s, self.input_shape, show=True)
-
-        b = torch.sort(bbx, dim=0)
-        bb = torch.sort(s, dim=0)
+        # reduce_bounding_boxes = ReduceBoundingBoxes(0.5, 0.1, (3, *original_img_size), self.num_of_patches)
+        # s = reduce_bounding_boxes(torch.clone(fm))
+        # # draw_bbx(img, s, self.input_shape, show=True)
+        #
+        # b = torch.sort(bbx, dim=0)
+        # bb = torch.sort(s, dim=0)
         #
         # try:
         #     torch.all(b.values == bb.values)
@@ -98,4 +119,11 @@ class WIDERFaceDataset(Dataset):
         #
         # assert torch.all(b.values == bb.values)
 
-        return img, fm, bbx2
+
+        # normalization_transform = transforms.Compose([
+        #     transforms.Normalize(mean=0.5, std=0.25)
+        # ])
+        # img = normalization_transform(img/255)
+
+        img = img/255
+        return img, fm, bbx

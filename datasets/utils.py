@@ -86,11 +86,13 @@ def draw_bbx(img, bbx, input_shape=(320, 240), save_name="image", show=False):
         img = transforms.ToPILImage()(img)
     draw = ImageDraw.Draw(img)
     for b in bbx:
-        if b[3] <= 15 or b[4] <= 15:
+        if len(b) == 5:
+            b = b[1:]
+        if b[2] <= 15 or b[3] <= 15:
             width = 1
         else:
             width = 3
-        bbx = convert_bbx_to_xyxy(b[1:])
+        bbx = convert_bbx_to_xyxy(b)
         draw.rectangle(bbx, outline="blue", width=width)
         # bbx = b[1:]
         # draw.rectangle(bbx.detach().cpu().numpy(), outline="blue", width=width)

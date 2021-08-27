@@ -59,7 +59,7 @@ class ModelMeta(LightningModule):
             ground_truth_boxes = y[i]
             loss += loss_fn(predicted_boxes, ground_truth_boxes)
 
-            gt_bbx = self.model.reduce_bounding_boxes(ground_truth_boxes).reshape(5, -1)[1:].permute(1, 0)
+            gt_bbx = self.model.reduce_bounding_boxes(ground_truth_boxes).reshape(5, -1)[1:].permute(1, 0).to(ground_truth_boxes.device)
             pred_bbx = self.model.reduce_bounding_boxes(predicted_boxes)
 
             if pred_bbx.shape[0] > 0:
@@ -70,7 +70,10 @@ class ModelMeta(LightningModule):
                 pred_bbx[:, 2] = pred_bbx[:, 2] + pred_bbx[:, 0]
                 pred_bbx[:, 3] = pred_bbx[:, 3] + pred_bbx[:, 1]
                 iou = torch.nan_to_num(box_iou(gt_bbx, pred_bbx), 0)
-                recall = torch.where(iou > 0.5)[0].shape[0] / gt_bbx.shape[0]
+                if gt_bbx.shape[0] == 0:
+                    recall = 1.0 if pred_bbx.shape[0] == 0 else 0.0
+                else:
+                    recall = torch.where(iou > 0.5)[0].shape[0] / gt_bbx.shape[0]
                 total_recall += recall
                 precision = torch.where(iou > 0.5)[0].shape[0] / pred_bbx.shape[0]
                 total_precision += precision

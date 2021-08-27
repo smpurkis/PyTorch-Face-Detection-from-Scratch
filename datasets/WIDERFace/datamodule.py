@@ -9,6 +9,8 @@ from torchvision import transforms
 import tqdm
 from datasets.WIDERFace.dataset import WIDERFaceDataset
 from datasets.utils import draw_bbx
+import albumentations as A
+from albumentations.pytorch.transforms import ToTensorV2
 
 dataset_links = {
     "train": {
@@ -86,12 +88,24 @@ class WIDERFaceDataModule(pl.LightningDataModule):
         targets = [t for t in targets if t["bbx"].size(0) < 3]
         return targets
 
+    def training_transform(self):
+        training_transform = A.Compose([
+            A.Resize(width=self.input_shape[1], height=self.input_shape[0]),
+            # A.HorizontalFlip(p=0.5),
+            # A.RandomBrightnessContrast(p=0.3),
+            # A.augmentations.geometric.rotate.Rotate(20, p=0.4),
+            # A.augmentations.transforms.GaussNoise(var_limit=400.0, p=0.3),
+            # A.augmentations.transforms.GlassBlur(sigma=0.1, max_delta=1, iterations=1, p=0.3),
+            # A.augmentations.transforms.MotionBlur(p=0.3),
+            ToTensorV2(),
+        ], bbox_params=A.BboxParams(format='coco'))
+        return training_transform
+
     def default_transform(self):
-        default_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Resize(size=(self.input_shape[1], self.input_shape[0])),
-            # transforms.Normalize(mean=1, std=1)
-        ])
+        default_transform = A.Compose([
+            A.Resize(width=self.input_shape[1], height=self.input_shape[0]),
+            ToTensorV2(),
+        ], bbox_params=A.BboxParams(format='coco'))
         return default_transform
 
     def setup(self, stage=None):
@@ -99,7 +113,7 @@ class WIDERFaceDataModule(pl.LightningDataModule):
             data_dir=self.data_dir,
             split="train",
             num_of_patches=self.num_of_patches,
-            transform=self.default_transform(),
+            transform=self.training_transform(),
             input_shape=self.input_shape,
             targets=self.get_targets(split="train")
         )
@@ -163,9 +177,9 @@ if __name__ == '__main__':
         input_shape=input_shape
     )
     dm.setup()
-    # for i in tqdm.auto.tqdm(range(len(dm.train_dataset))):
-    #     x, y = dm.train_dataset[i]
-    x, y = dm.train_dataset[0]
+    for i in tqdm.auto.tqdm(range(len(dm.train_dataset))):
+        x, y, _ = dm.train_dataset[i]
+    # x, y = dm.train_dataset[0]
     if isinstance(x, torch.Tensor):
         x = transforms.ToPILImage()(x)
     draw = draw_bbx(x, y, input_shape=input_shape, show=True)

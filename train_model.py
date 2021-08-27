@@ -26,7 +26,7 @@ if __name__ == '__main__':
         lr=1e-4
     )
 
-    # checkpoint = torch.load("lightning_logs/version_268/checkpoints/epoch=17-step=737.ckpt")
+    # checkpoint = torch.load("lightning_logs/version_1/checkpoints/epoch=15-step=1615.ckpt")
     # model_setup.load_state_dict(checkpoint["state_dict"])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
