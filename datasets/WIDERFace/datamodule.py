@@ -91,12 +91,12 @@ class WIDERFaceDataModule(pl.LightningDataModule):
     def training_transform(self):
         training_transform = A.Compose([
             A.Resize(width=self.input_shape[1], height=self.input_shape[0]),
-            # A.HorizontalFlip(p=0.5),
-            # A.RandomBrightnessContrast(p=0.3),
-            # A.augmentations.geometric.rotate.Rotate(20, p=0.4),
-            # A.augmentations.transforms.GaussNoise(var_limit=400.0, p=0.3),
-            # A.augmentations.transforms.GlassBlur(sigma=0.1, max_delta=1, iterations=1, p=0.3),
-            # A.augmentations.transforms.MotionBlur(p=0.3),
+            A.HorizontalFlip(p=0.5),
+            A.RandomBrightnessContrast(p=0.3),
+            A.augmentations.geometric.rotate.Rotate(20, p=0.4),
+            A.augmentations.transforms.GaussNoise(var_limit=400.0, p=0.3),
+            A.augmentations.transforms.GlassBlur(sigma=0.1, max_delta=1, iterations=1, p=0.3),
+            A.augmentations.transforms.MotionBlur(p=0.3),
             ToTensorV2(),
         ], bbox_params=A.BboxParams(format='coco'))
         return training_transform

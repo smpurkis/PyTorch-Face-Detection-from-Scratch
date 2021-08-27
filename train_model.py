@@ -11,7 +11,7 @@ if __name__ == '__main__':
     Path("out.log").unlink(missing_ok=True)
 
     num_of_patches = 5
-    input_shape = (320, 320)
+    input_shape = (480, 480)
 
     model = BaseModel(
         filters=64,
@@ -26,13 +26,13 @@ if __name__ == '__main__':
         lr=1e-4
     )
 
-    # checkpoint = torch.load("lightning_logs/version_1/checkpoints/epoch=15-step=1615.ckpt")
-    # model_setup.load_state_dict(checkpoint["state_dict"])
+    checkpoint = torch.load("lightning_logs/version_8/checkpoints/epoch=12-step=5225.ckpt")
+    model_setup.load_state_dict(checkpoint["state_dict"])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainer = Trainer(
         gpus=1 if device == torch.device("cuda") else 0,
-        max_epochs=50,
+        max_epochs=40,
         precision=16,
         progress_bar_refresh_rate=1,
         num_sanity_val_steps=0

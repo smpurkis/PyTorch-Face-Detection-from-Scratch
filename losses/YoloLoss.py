@@ -31,8 +31,8 @@ class YoloLoss:
         no_object_weight = 1
 
         xy_loss = coord_weight * object_in_cell * ((gt_x - pred_x) ** 2 + (gt_y - pred_y) ** 2)
-        # wh_loss = coord_weight * object_in_cell * ((gt_w ** 0.5 - pred_w ** 0.5) ** 2 + (gt_h ** 0.5 - pred_h ** 0.5) ** 2)
-        wh_loss = coord_weight * object_in_cell * ((gt_w - pred_w) ** 2 + (gt_h - pred_h) ** 2)
+        wh_loss = coord_weight * object_in_cell * ((gt_w ** 0.5 - pred_w ** 0.5) ** 2 + (gt_h ** 0.5 - pred_h ** 0.5) ** 2)
+        # wh_loss = coord_weight * object_in_cell * ((gt_w - pred_w) ** 2 + (gt_h - pred_h) ** 2)
         conf_loss = (object_in_cell + empty_cell * no_object_weight) * (gt_conf - pred_conf) ** 2
 
         loss = torch.sum(xy_loss + wh_loss + conf_loss)

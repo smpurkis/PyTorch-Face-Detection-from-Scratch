@@ -21,7 +21,7 @@ class WIDERFaceDataset(Dataset):
 
     def __len__(self):
         # return 2
-        return len(self.targets)//4
+        return len(self.targets)
 
     def convert_bbx_to_feature_map(self, bbx, img_size):
         feature_map = fm = torch.zeros((5, self.num_of_patches, self.num_of_patches))
@@ -102,7 +102,7 @@ class WIDERFaceDataset(Dataset):
         # draw_bbx(img, bbx2, self.input_shape, show=True)
         # draw_bbx(img_og, bbx, original_img_size)
 
-        fm = self.convert_bbx_to_feature_map(bbx, original_img_size)
+        fm = self.convert_bbx_to_feature_map(bbx, self.input_shape)
         # draw_bbx(img_og, fm, original_img_size, show=True)
 
         # reduce_bounding_boxes = ReduceBoundingBoxes(0.5, 0.1, (3, *original_img_size), self.num_of_patches)

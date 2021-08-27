@@ -66,10 +66,10 @@ class BaseModel(nn.Module):
         #     padding="same"
         # )
         self.out = nn.LazyConv2d(
-            out_channels=5 * filters,
+            out_channels=5 * filters//4,
             stride=2,
-            kernel_size=(5, 5),
-            padding=2
+            kernel_size=(3, 3),
+            padding=1
         )
         self.leaky_relu = nn.LeakyReLU(0.2)
         # self.linear1 = nn.LazyLinear(5 * num_of_patches ** 2)
@@ -80,7 +80,7 @@ class BaseModel(nn.Module):
             input_shape=self.input_shape,
             num_of_patches=self.num_of_patches
         )
-        self.feature_extractor = nn.Sequential(*[l for l in list(torchvision.models.resnet18(pretrained=True).children())[:-2]])
+        self.feature_extractor = nn.Sequential(*[l for l in list(torchvision.models.resnet18(pretrained=False).children())[:-2]])
         # for param in self.feature_extractor.parameters():
         #     param.requires_grad = False
         self.dropout = nn.Dropout(0.75)
