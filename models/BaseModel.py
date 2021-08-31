@@ -80,7 +80,7 @@ class BaseModel(nn.Module):
             input_shape=self.input_shape,
             num_of_patches=self.num_of_patches
         )
-        self.feature_extractor = nn.Sequential(*[l for l in list(torchvision.models.resnet18(pretrained=False).children())[:-2]])
+        self.feature_extractor = nn.Sequential(*[l for l in list(torchvision.models.resnet18(pretrained=True).children())[:-2]])
         # for param in self.feature_extractor.parameters():
         #     param.requires_grad = False
         self.dropout = nn.Dropout(0.75)

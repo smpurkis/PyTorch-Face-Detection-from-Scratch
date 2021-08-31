@@ -90,6 +90,7 @@ class WIDERFaceDataModule(pl.LightningDataModule):
 
     def training_transform(self):
         training_transform = A.Compose([
+            A.augmentations.crops.transforms.RandomResizedCrop(width=self.input_shape[1], height=self.input_shape[0]),
             A.Resize(width=self.input_shape[1], height=self.input_shape[0]),
             A.HorizontalFlip(p=0.5),
             A.RandomBrightnessContrast(p=0.3),
