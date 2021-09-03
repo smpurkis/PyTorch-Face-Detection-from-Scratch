@@ -38,7 +38,7 @@ class ResidualBlock(nn.Module):
 
 
 class BaseModel(nn.Module):
-    def __init__(self, filters, input_shape, num_of_patches=16, num_of_residual_blocks=10, probability_threshold=0.1,
+    def __init__(self, filters, input_shape, num_of_patches=16, num_of_residual_blocks=10, probability_threshold=0.5,
                  iou_threshold=0.5):
         super().__init__()
         self.input_shape = input_shape
@@ -114,6 +114,8 @@ class BaseModel(nn.Module):
         # x = self.dropout(x)
         x = self.linear(x).reshape(bs, 5, self.num_of_patches, self.num_of_patches)
         x = nn.Sigmoid()(x)
+        if torch.isnan(torch.sum(x)):
+            print(x)
         # x = torch.abs(x)
         # s = [self.reduce_bounding_boxes(xi) for xi in x[:]]
         return x
