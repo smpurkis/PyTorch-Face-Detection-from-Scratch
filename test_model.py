@@ -4,8 +4,7 @@ import torch
 from pytorch_lightning import Trainer
 
 from datasets.WIDERFace import WIDERFaceDataModule
-from models import ModelMeta
-from models.Resnet import Resnet
+from models import BaseModel, ModelMeta
 
 if __name__ == '__main__':
     torch.random.manual_seed(0)
@@ -14,8 +13,8 @@ if __name__ == '__main__':
     num_of_patches = 10
     input_shape = (480, 480)
 
-    model = Resnet(
-        filters=32,
+    model = BaseModel(
+        filters=64,
         input_shape=(3, *input_shape),
         num_of_patches=num_of_patches,
         num_of_residual_blocks=10
@@ -27,7 +26,7 @@ if __name__ == '__main__':
         lr=1e-4
     )
 
-    # checkpoint = torch.load("lightning_logs/custom_128_10x10_sam_adam/checkpoints/epoch=69-step=56279.ckpt")
+    # checkpoint = torch.load("lightning_logs/custom_64_10x10_sam_adam/checkpoints/epoch=69-step=56279.ckpt")
     # model_setup.load_state_dict(checkpoint["state_dict"])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -44,5 +43,4 @@ if __name__ == '__main__':
         num_of_patches=num_of_patches,
         shuffle=False
     )
-    trainer.fit(model=model_setup, datamodule=dm)
-    # trainer.test(model=model_setup, test_dataloaders=dm.test_dataloader())
+    trainer.test(model=model_setup, test_dataloaders=dm.val_dataloader())

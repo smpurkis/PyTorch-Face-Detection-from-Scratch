@@ -13,18 +13,14 @@ class ReduceBoundingBoxes(nn.Module):
         self.iou_threshold = iou_threshold
         self.input_shape = input_shape
         _, self.width, self.height = input_shape
-        # print("self.width, self.height", self.width, self.height)
         self.x_patch_size = self.width / num_of_patches
         self.y_patch_size = self.height / num_of_patches
-        # print("x_patch_size 2, y_patch_size 2", self.x_patch_size, self.y_patch_size)
 
     def remove_low_probabilty_bbx(self, x):
         i, j = torch.where(x[0] > self.probability_threshold)
         if len(i) == 0 and len(j) == 0:
             return torch.empty([0]), False
         bbx = x[:, i, j].permute(1, 0)
-        # bbx[:, 2] = bbx[:, 0] + bbx[:, 2]
-        # bbx[:, 3] = bbx[:, 1] + bbx[:, 3]
         return bbx, True
 
     def scale_batch_bbx_xywh(self, x):
@@ -58,7 +54,6 @@ class ReduceBoundingBoxes(nn.Module):
 
     def forward(self, x):
         x = self.scale_batch_bbx_xywh(x)
-        # x = self.scale_batch_bbx(x)
         x, boxes_exist = self.remove_low_probabilty_bbx(x)
         if boxes_exist:
             x = self.convert_batch_to_xyxy(x)
@@ -78,10 +73,13 @@ def convert_bbx_to_xyxy(bbx):
 
 
 def draw_bbx(img, bbx, input_shape=(320, 240), save_name="image", show=False):
-    if len(bbx.shape) == 3:
-        num_of_patches = bbx.shape[1]
-        reduce_bounding_boxes = ReduceBoundingBoxes(0.9, 0.5, (3, *input_shape), num_of_patches)
-        bbx = reduce_bounding_boxes(bbx)
+    if isinstance(bbx, torch.Tensor):
+        if len(bbx.shape) == 3:
+            num_of_patches = bbx.shape[1]
+            reduce_bounding_boxes = ReduceBoundingBoxes(0.9, 0.5, (3, *input_shape), num_of_patches)
+            bbx = reduce_bounding_boxes(bbx)
+    elif isinstance(bbx, list):
+        pass
     if isinstance(img, torch.Tensor):
         img = transforms.ToPILImage()(img)
     draw = ImageDraw.Draw(img)

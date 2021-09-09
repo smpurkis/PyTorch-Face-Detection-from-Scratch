@@ -105,8 +105,8 @@ class WIDERFaceDataset(Dataset):
         fm = self.convert_bbx_to_feature_map(bbx, self.input_shape)
         # draw_bbx(img_og, fm, original_img_size, show=True)
 
-        # reduce_bounding_boxes = ReduceBoundingBoxes(0.5, 0.1, (3, *original_img_size), self.num_of_patches)
-        # s = reduce_bounding_boxes(torch.clone(fm))
+        reduce_bounding_boxes = ReduceBoundingBoxes(0.5, 0.5, (3, *self.input_shape), self.num_of_patches)
+        s = reduce_bounding_boxes(torch.clone(fm))
         # # draw_bbx(img, s, self.input_shape, show=True)
         #
         # b = torch.sort(bbx, dim=0)
