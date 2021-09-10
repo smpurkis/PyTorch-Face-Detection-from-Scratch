@@ -18,13 +18,16 @@ class ReduceBoundingBoxes(nn.Module):
 
     def remove_low_probabilty_bbx(self, x):
         i, j = torch.where(x[0] > self.probability_threshold)
-        if len(i) == 0 and len(j) == 0:
-            return torch.empty([0]), False
+        if i.shape[0] == 0 and j.shape[0] == 0:
+            return torch.empty([0]), torch.tensor(0)
         bbx = x[:, i, j].permute(1, 0)
-        return bbx, True
+        return bbx, torch.tensor(1)
 
     def scale_batch_bbx_xywh(self, x):
+        # try:
         i, j = torch.where(x[0] > self.probability_threshold)
+        # except:
+        #     breakpoint()
         x = x.float()
         scaled_x = torch.clone(x).float()
         scaled_x[1, i, j] = x[1, i, j] * self.x_patch_size + i * self.x_patch_size
@@ -55,7 +58,7 @@ class ReduceBoundingBoxes(nn.Module):
     def forward(self, x):
         x = self.scale_batch_bbx_xywh(x)
         x, boxes_exist = self.remove_low_probabilty_bbx(x)
-        if boxes_exist:
+        if boxes_exist == 1:
             x = self.convert_batch_to_xyxy(x)
             bbx = torch.round(x[:, 1:])
             scores = x[:, 0]
@@ -65,7 +68,7 @@ class ReduceBoundingBoxes(nn.Module):
             # out = x[bbxis]
             return out
         else:
-            return torch.empty(0)
+            return torch.empty(0).reshape(0, 5)
 
 
 def convert_bbx_to_xyxy(bbx):

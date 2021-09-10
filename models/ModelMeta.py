@@ -229,7 +229,7 @@ class ModelMeta(LightningModule):
         if not training:
             self.epoch_metrics = epoch_metrics
         else:
-            out = Path("out.log")
+            out = Path("out_resnet_custom_64_15x15_480x480_sam_adam.log")
             with out.open("a") as fp:
                 fp.write(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']} ")
                 fp.write(f"training, loss: {epoch_metrics['loss']:5.3f}, iou: {epoch_metrics['total_iou']:5.3f},"

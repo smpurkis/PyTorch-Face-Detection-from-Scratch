@@ -27,14 +27,17 @@ class BaseModel(nn.Module):
         if self.input_shape is None:
             raise Exception("Please set 'input_shape'")
         else:
-            self(torch.rand((1, *self.input_shape)).cuda())
+            self(torch.rand((1, *self.input_shape)).to(torch.device("cuda" if torch.cuda.is_available() else "cpu")))
             print(summary(self, (1, *self.input_shape)))
 
     def non_max_suppression(self, x):
         if len(x.shape) == 4:
-            return [self.reduce_bounding_boxes(xi) for xi in x[:]]
+            return tuple([self.reduce_bounding_boxes(x[i]) for i in range(x.shape[0])])
         else:
-            return [self.reduce_bounding_boxes(x)]
+            return self.reduce_bounding_boxes(x)
+
+    def single_non_max_suppression(self, x):
+        return self.reduce_bounding_boxes(x)
 
     @torch.no_grad()
     def predict(self, x, probability_threshold=0.5, iou_threshold=0.5):

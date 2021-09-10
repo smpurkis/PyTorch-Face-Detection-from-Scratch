@@ -8,7 +8,7 @@ from models import BaseModel, ModelMeta
 
 if __name__ == '__main__':
     torch.random.manual_seed(0)
-    Path("out.log").unlink(missing_ok=True)
+    Path("logs/out_resnet_custom_64_15x15_480x480_sam_adam.log").unlink(missing_ok=True)
 
     num_of_patches = 10
     input_shape = (480, 480)

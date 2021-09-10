@@ -15,13 +15,15 @@ class ResidualBlock(nn.Module):
             in_channels=filters,
             out_channels=filters,
             kernel_size=(3, 3),
-            padding="same"
+            # padding="same"
+            padding=1
         )
         self.conv2 = nn.Conv2d(
             in_channels=filters,
             out_channels=filters,
             kernel_size=(3, 3),
-            padding="same"
+            # padding="same",
+            padding=1
         )
         self.max_pool = nn.MaxPool2d(2)
         self.leaky_relu = nn.LeakyReLU(0.2)
@@ -40,7 +42,7 @@ class ResidualBlock(nn.Module):
         return x
 
 
-class Resnet(BaseModel):
+class PoolResnet(BaseModel):
     def __init__(self, filters, input_shape, num_of_patches=16, num_of_residual_blocks=10, probability_threshold=0.5,
                  iou_threshold=0.5, pretrained=False):
         super().__init__(filters, input_shape, num_of_patches=16, probability_threshold=0.5, iou_threshold=0.5)
@@ -49,9 +51,9 @@ class Resnet(BaseModel):
         self.conv1 = nn.Conv2d(
             in_channels=input_shape[0],
             out_channels=filters,
-            kernel_size=(3, 3),
-            stride=(2, 2),
-            padding=1,
+            kernel_size=(10, 10),
+            stride=(8, 8),
+            padding=5,
         )
         self.residual_blocks = nn.Sequential(
             *[ResidualBlock(
@@ -63,8 +65,8 @@ class Resnet(BaseModel):
             in_channels=filters,
             out_channels=5,
             stride=(1, 1),
-            kernel_size=(3, 3),
-            padding=1
+            kernel_size=(6, 6),
+            padding=0
         )
         self.sigmoid = nn.Sigmoid()
         self.resize = transforms.Resize(size=self.input_shape[1:])
@@ -90,10 +92,10 @@ class Resnet(BaseModel):
 if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = ""
     input_shape = (480, 480)
-    bm = Resnet(
+    bm = PoolResnet(
         filters=64,
         input_shape=(3, *input_shape),
-        num_of_patches=10,
+        num_of_patches=15,
         num_of_residual_blocks=10
     ).cpu()
     bm.eval()
