@@ -24,10 +24,7 @@ class ReduceBoundingBoxes(nn.Module):
         return bbx, torch.tensor(1)
 
     def scale_batch_bbx_xywh(self, x):
-        # try:
         i, j = torch.where(x[0] > self.probability_threshold)
-        # except:
-        #     breakpoint()
         x = x.float()
         scaled_x = torch.clone(x).float()
         scaled_x[1, i, j] = x[1, i, j] * self.x_patch_size + i * self.x_patch_size
@@ -76,17 +73,18 @@ def convert_bbx_to_xyxy(bbx):
 
 
 def draw_bbx(img, bbx, input_shape=(320, 240), save_name="image", show=False):
-    if isinstance(bbx, torch.Tensor):
-        if len(bbx.shape) == 3:
-            num_of_patches = bbx.shape[1]
+    bbxs = bbx
+    if isinstance(bbxs, torch.Tensor):
+        if len(bbxs.shape) == 3:
+            num_of_patches = bbxs.shape[1]
             reduce_bounding_boxes = ReduceBoundingBoxes(0.9, 0.5, (3, *input_shape), num_of_patches)
-            bbx = reduce_bounding_boxes(bbx)
-    elif isinstance(bbx, list):
+            bbxs = reduce_bounding_boxes(bbxs)
+    elif isinstance(bbxs, list):
         pass
     if isinstance(img, torch.Tensor):
         img = transforms.ToPILImage()(img)
     draw = ImageDraw.Draw(img)
-    for b in bbx:
+    for b in bbxs:
         if len(b) == 5:
             b = b[1:]
         if b[2] <= 15 or b[3] <= 15:

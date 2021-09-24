@@ -8,20 +8,30 @@ from models import BaseModel
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, filters, num_of_patches, dropout=0.25):
+    def __init__(self, filters, num_of_patches, dropout=0.25, bias=False):
         super().__init__()
         self.num_of_patches = num_of_patches
-        self.conv1 = nn.Conv2d(
+        self.pointwise_conv1 = nn.Conv2d(
             in_channels=filters,
             out_channels=filters,
-            kernel_size=(3, 3),
-            padding="same"
+            kernel_size=(1, 1),
+            padding=0,
+            bias=bias
         )
-        self.conv2 = nn.Conv2d(
+        self.depthwise_conv = nn.Conv2d(
             in_channels=filters,
             out_channels=filters,
             kernel_size=(3, 3),
-            padding="same"
+            padding=1,
+            groups=filters,
+            bias=bias
+        )
+        self.pointwise_conv2 = nn.Conv2d(
+            in_channels=filters,
+            out_channels=filters,
+            kernel_size=(1, 1),
+            padding=0,
+            bias=bias
         )
         self.max_pool = nn.MaxPool2d(2)
         self.leaky_relu = nn.LeakyReLU(0.2)
@@ -29,10 +39,11 @@ class ResidualBlock(nn.Module):
 
     def forward(self, x):
         skip_x = x
-        x = self.conv1(x)
+        x = self.pointwise_conv1(x)
         x = self.leaky_relu(x)
-        x = self.conv2(x)
+        x = self.depthwise_conv(x)
         x = self.leaky_relu(x)
+        x = self.pointwise_conv2(x)
         x = self.dropout2d(x)
         x = x + skip_x
         if x.shape[2] > self.num_of_patches:
@@ -40,19 +51,19 @@ class ResidualBlock(nn.Module):
         return x
 
 
-class Resnet(BaseModel):
-    def __init__(self, filters, input_shape, num_of_patches, num_of_residual_blocks=10, probability_threshold=0.5,
-                 iou_threshold=0.5, pretrained=False, output_kernel_size=3):
-        super().__init__(filters, input_shape, num_of_patches=num_of_patches,
-                         probability_threshold=probability_threshold, iou_threshold=iou_threshold)
+class SeparableCNN(BaseModel):
+    def __init__(self, filters, input_shape, num_of_residual_blocks=10, probability_threshold=0.5,
+                 iou_threshold=0.5, pretrained=False, input_kernel_size=10, input_stride=8, output_kernel_size=6,
+                 output_padding=0):
+        super().__init__(filters, input_shape, num_of_patches=16, probability_threshold=probability_threshold, iou_threshold=iou_threshold)
         self.pretrained = pretrained
         self.dropout2d = nn.Dropout2d(0.5)
         self.conv1 = nn.Conv2d(
             in_channels=input_shape[0],
             out_channels=filters,
-            kernel_size=(3, 3),
-            stride=(2, 2),
-            padding=1,
+            kernel_size=(input_kernel_size, input_kernel_size),
+            stride=(input_stride, input_stride),
+            padding=input_kernel_size - input_stride,
         )
         self.residual_blocks = nn.Sequential(
             *[ResidualBlock(
@@ -65,7 +76,7 @@ class Resnet(BaseModel):
             out_channels=5,
             stride=(1, 1),
             kernel_size=(output_kernel_size, output_kernel_size),
-            padding=1
+            padding=output_padding
         )
         self.sigmoid = nn.Sigmoid()
         self.resize = transforms.Resize(size=self.input_shape[1:])
@@ -91,8 +102,8 @@ class Resnet(BaseModel):
 if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = ""
     input_shape = (480, 480)
-    bm = Resnet(
-        filters=64,
+    bm = SeparableCNN(
+        filters=128,
         input_shape=(3, *input_shape),
         num_of_patches=15,
         num_of_residual_blocks=10

@@ -4,6 +4,7 @@ import torch
 from pytorch_lightning import Trainer
 
 from datasets.WIDERFace import WIDERFaceDataModule
+from datasets.utils import ReduceBoundingBoxes
 from models import ModelMeta
 from models.PoolResnet import PoolResnet
 from models.Resnet import Resnet
@@ -14,13 +15,13 @@ if __name__ == "__main__":
 
     num_of_patches = nop = 15
     input_shape = (480, 480)
-    # filters = 128
-    filters = 576
+    filters = 128
     lr = 1e-4
+    probability_threshold = 0.5
+    iou_threshold = 0.01
 
-    name = f"pretrained_mobilenetv3backbone_{filters}_{nop}x{nop}_{input_shape[0]}x{input_shape[1]}_sam_adam_all_data2"
-    # name = f"custom_poolresnet_{filters}_{nop}x{nop}_{input_shape[0]}x{input_shape[1]}_sam_adam_all_data2"
-    log_path = Path(f"logs/out_{name}.log")
+    name = f"custom_poolresnet_{filters}_{nop}x{nop}_{input_shape[0]}x{input_shape[1]}_sam_adam_all_data"
+    log_path = Path(f"logs/out_{name}_single_validate.log")
     log_path.unlink(missing_ok=True)
     model_save_path = f"./saved_models/{name}.pth"
 
@@ -28,7 +29,9 @@ if __name__ == "__main__":
         filters=filters,
         input_shape=(3, *input_shape),
         num_of_patches=num_of_patches,
-        # num_of_residual_blocks=10,
+        num_of_residual_blocks=10,
+        probability_threshold=probability_threshold,
+        iou_threshold=iou_threshold
     ).cuda()
 
     model.summary()
@@ -38,10 +41,13 @@ if __name__ == "__main__":
         log_path=log_path,
     )
 
-    # checkpoint = torch.load("lightning_logs/pretrained_mobilenetv3backbone_576_15x15_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt")
     # checkpoint = torch.load("lightning_logs/custom_poolresnet_128_10x10_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt")
     # checkpoint = torch.load("lightning_logs/custom_resnet_64_15x15_480x480_sam_adam/checkpoints/epoch=52-step=42611.ckpt")
-    # model_setup.load_state_dict(checkpoint["state_dict"])
+    # checkpoint = torch.load("lightning_logs/custom_poolresnet_64_10x10_480x480_sam_adam/checkpoints/epoch=69-step=56279.ckpt")
+    # checkpoint = torch.load("lightning_logs/custom_poolresnet_128_10x10_480x480_sam_adam/checkpoints/epoch=69-step=56279.ckpt")
+    checkpoint = torch.load("lightning_logs/pretrained_mobilenetv3backbone_576_15x15_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt")
+    model_setup.load_state_dict(checkpoint["state_dict"])
+    model_setup.num_of_patches = num_of_patches
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     trainer = Trainer(
@@ -57,6 +63,5 @@ if __name__ == "__main__":
         num_of_patches=num_of_patches,
         shuffle=False,
     )
-    trainer.fit(model=model_setup, datamodule=dm)
-    model_setup.to_torchscript(model_save_path)
-    # trainer.test(model=model_setup, test_dataloaders=dm.test_dataloader())
+    dm.setup()
+    trainer.test(model=model_setup, test_dataloaders=dm.val_dataloader())

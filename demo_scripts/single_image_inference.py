@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import cv2
 import torch
@@ -14,10 +15,11 @@ os.environ['CUDA_VISIBLE_DEVICES'] = ""
 num_of_patches = 15
 input_shape = (480, 480)
 
-model = MobilenetV3Backbone(
-    filters=128,
+model = Resnet(
+    filters=64,
     input_shape=(3, *input_shape),
     num_of_patches=num_of_patches,
+    num_of_residual_blocks=10
 )
 model_setup = ModelMeta(
     model=model,
@@ -28,15 +30,15 @@ model_setup = ModelMeta(
 #                         map_location=torch.device("cpu"))
 # checkpoint = torch.load("lightning_logs/custom_poolresnet_64_10x10_480x480_sam_adam/checkpoints/epoch=69-step=56279.ckpt",
 #                         map_location=torch.device("cpu"))
-# checkpoint = torch.load("lightning_logs/custom_resnet_64_15x15_480x480_sam_adam/checkpoints/epoch=52-step=42611.ckpt",
-#                         map_location=torch.device("cpu"))
-checkpoint = torch.load("lightning_logs/pretrained_mobilenetv3backbone_576_15x15_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt",
+checkpoint = torch.load("lightning_logs/custom_resnet_64_15x15_480x480_sam_adam/checkpoints/epoch=52-step=42611.ckpt",
                         map_location=torch.device("cpu"))
+# checkpoint = torch.load("lightning_logs/pretrained_mobilenetv3backbone_576_15x15_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt",
+#                         map_location=torch.device("cpu"))
 model_setup.load_state_dict(checkpoint["state_dict"])
 
 model.num_of_patches = num_of_patches
 model.reduce_bounding_boxes = ReduceBoundingBoxes(
-            probability_threshold=0.7,
+            probability_threshold=0.5,
             iou_threshold=0.01,
             input_shape=model.input_shape,
             num_of_patches=model.num_of_patches
@@ -75,21 +77,13 @@ def extract_face(frame):
         image = cv2.rectangle(image, pt1=(bbx[0], bbx[1]), pt2=(bbx[2], bbx[3]), thickness=width, color=(0, 0, 200))
     return image
 
+for img_path in Path("imgs", "test_imgs").glob("*"):
+    save_img_path = Path(*img_path.parts[:1], "annotated_imgs", img_path.name)
+    frame = cv2.imread(img_path.as_posix())
+    processed_frame = extract_face(frame)
+    cv2.imwrite(save_img_path.as_posix(), processed_frame)
 
-cap = cv2.VideoCapture(0)
+# cv2.imshow('Input', processed_frame)
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
 
-# Check if the webcam is opened correctly
-if not cap.isOpened():
-    raise IOError("Cannot open webcam")
-
-while True:
-    ret, frame = cap.read()
-    process_frame = extract_face(frame)
-    cv2.imshow('Input', process_frame)
-
-    c = cv2.waitKey(1)
-    if c == 27:
-        break
-
-cap.release()
-cv2.destroyAllWindows()

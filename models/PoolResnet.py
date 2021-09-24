@@ -37,23 +37,25 @@ class ResidualBlock(nn.Module):
         x = self.leaky_relu(x)
         x = self.dropout2d(x)
         x = x + skip_x
-        if x.shape[2] > self.num_of_patches:
+        if x.shape[2] > 2*self.num_of_patches:
             x = self.max_pool(x)
         return x
 
 
 class PoolResnet(BaseModel):
-    def __init__(self, filters, input_shape, num_of_patches=16, num_of_residual_blocks=10, probability_threshold=0.5,
-                 iou_threshold=0.5, pretrained=False):
-        super().__init__(filters, input_shape, num_of_patches=16, probability_threshold=0.5, iou_threshold=0.5)
+    def __init__(self, filters, input_shape, num_of_patches, num_of_residual_blocks=10, probability_threshold=0.5,
+                 iou_threshold=0.5, pretrained=False, input_kernel_size=10, input_stride=8, output_kernel_size=6,
+                 output_padding=0):
+        super().__init__(filters, input_shape, num_of_patches=num_of_patches,
+                         probability_threshold=probability_threshold, iou_threshold=iou_threshold)
         self.pretrained = pretrained
         self.dropout2d = nn.Dropout2d(0.5)
         self.conv1 = nn.Conv2d(
             in_channels=input_shape[0],
             out_channels=filters,
-            kernel_size=(10, 10),
-            stride=(8, 8),
-            padding=5,
+            kernel_size=(input_kernel_size, input_kernel_size),
+            stride=(input_stride, input_stride),
+            padding=input_kernel_size - input_stride,
         )
         self.residual_blocks = nn.Sequential(
             *[ResidualBlock(
@@ -65,8 +67,8 @@ class PoolResnet(BaseModel):
             in_channels=filters,
             out_channels=5,
             stride=(1, 1),
-            kernel_size=(6, 6),
-            padding=0
+            kernel_size=(output_kernel_size, output_kernel_size),
+            padding=output_padding
         )
         self.sigmoid = nn.Sigmoid()
         self.resize = transforms.Resize(size=self.input_shape[1:])

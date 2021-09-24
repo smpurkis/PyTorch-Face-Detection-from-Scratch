@@ -81,11 +81,12 @@ class SAMSGD(Adam):
 
 
 class ModelMeta(LightningModule):
-    def __init__(self, model, lr=1e-4, pretrained=False, *args, **kwargs):
+    def __init__(self, model, lr=1e-4, pretrained=False, log_path=Path("out.log"), *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.model = model
         self.lr = lr
         self.automatic_optimization = True
+        self.log_path = log_path
 
     def forward(self, x):
         return self.model(x)
@@ -117,8 +118,9 @@ class ModelMeta(LightningModule):
             # closure_loss.backward()
             return closure_loss
 
-        if self.opt.closure is None:
-            self.opt.set_closure_fn(closure)
+        if not validation:
+            if self.opt.closure is None:
+                self.opt.set_closure_fn(closure)
 
         # if not validation:
         #     loss = self.opt.step(closure)
@@ -160,14 +162,26 @@ class ModelMeta(LightningModule):
             predicted_boxes = y_hat[i]
             ground_truth_boxes = y[i]
             loss += yolo_loss(predicted_boxes, ground_truth_boxes)
-
-            gt_bbx = self.model.reduce_bounding_boxes(ground_truth_boxes).reshape(5, -1)[1:].permute(1, 0).to(
-                ground_truth_boxes.device)
+            # reduce_bounding_boxes = ReduceBoundingBoxes(
+            #     probability_threshold=0.5,
+            #     iou_threshold=0.5,
+            #     input_shape=self.model.input_shape,
+            #     num_of_patches=self.model.num_of_patches
+            # )
+            # gt_bbx2 = reduce_bounding_boxes(ground_truth_boxes)[:, 1:].to(ground_truth_boxes.device)
+            gt_bbx = self.model.reduce_bounding_boxes(ground_truth_boxes)[:, 1:].to(ground_truth_boxes.device)
             # gt_bbx = gt_bbxs[i][:, 1:]
             pred_bbx = self.model.reduce_bounding_boxes(predicted_boxes)
+
             # print("gt_bbx", gt_bbx)
             # print("cgt_bxx", cgt_bxx)
             # print("pred_bbx", pred_bbx)
+            # draw_bbx(
+            #     img=x[i],
+            #     bbx=gt_bbx,
+            #     input_shape=self.model.input_shape,
+            #     show=True
+            # )
             if pred_bbx.shape[0] > 0:
                 pred_bbx = pred_bbx[:, 1:]
                 gt_bbx[:, 2] = gt_bbx[:, 2] + gt_bbx[:, 0]
@@ -206,6 +220,10 @@ class ModelMeta(LightningModule):
         step_outputs = self.step(batch, batch_idx, validation=True)
         return step_outputs
 
+    def test_step(self, batch, batch_idx):
+        step_outputs = self.step(batch, batch_idx, validation=True)
+        return step_outputs
+
     def format_metrics(self, epoch_outputs, training=True):
         step_str = 'training' if training else 'validation'
         epoch_metrics = {}
@@ -221,15 +239,18 @@ class ModelMeta(LightningModule):
         epoch_metrics["f1_score"] = f1_score
         self.log("loss", loss, prog_bar=True, logger=True, on_epoch=True)
         self.log(f"{step_str} loss", loss, prog_bar=True, logger=True, on_epoch=True)
-        self.log(f"{step_str} iou", epoch_metrics['loss'], prog_bar=True, logger=True, on_epoch=True)
+        self.log(f"{step_str} iou", epoch_metrics['total_iou'], prog_bar=True, logger=True, on_epoch=True)
         self.log(f"{step_str} recall", epoch_metrics['total_recall'], prog_bar=True, logger=True, on_epoch=True)
-        print(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']}", end=" ")
+        self.log(f"{step_str} precision", epoch_metrics['total_precision'], prog_bar=True, logger=True, on_epoch=True)
+        self.log(f"{step_str} f1_score", epoch_metrics['f1_score'], prog_bar=True, logger=True, on_epoch=True)
+        if training:
+            print(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']}", end=" ")
         print(f"\n{step_str}, loss: {epoch_metrics['loss']:5.3f}", end=" ")
 
         if not training:
             self.epoch_metrics = epoch_metrics
         else:
-            out = Path("out_resnet_custom_64_15x15_480x480_sam_adam.log")
+            out = self.log_path
             with out.open("a") as fp:
                 fp.write(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']} ")
                 fp.write(f"training, loss: {epoch_metrics['loss']:5.3f}, iou: {epoch_metrics['total_iou']:5.3f},"
@@ -246,3 +267,7 @@ class ModelMeta(LightningModule):
 
     def validation_epoch_end(self, validation_epoch_outputs):
         self.format_metrics(validation_epoch_outputs, training=False)
+
+    def test_epoch_end(self, validation_epoch_outputs):
+        self.format_metrics(validation_epoch_outputs, training=False)
+

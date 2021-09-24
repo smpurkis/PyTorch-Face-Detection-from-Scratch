@@ -84,8 +84,11 @@ class WIDERFaceDataModule(pl.LightningDataModule):
                     target["bbx"].append([float(l) for l in (1, *line.split()[:4])])
         targets.append(target)
         for target in targets:
+            # target["bbx"] = [t for t in target["bbx"] if t[3] >= 10 and t[4] >= 10]
             target["bbx"] = torch.tensor(target["bbx"])
-        targets = [t for t in targets if t["bbx"].size(0) < 3]
+        targets = [t for t in targets if t["bbx"].size(0) > 20]
+        targets = [targets[0]]
+        # targets = [t for t in targets if t["bbx"].size(0) < 3]
         return targets
 
     def training_transform(self):
@@ -100,14 +103,14 @@ class WIDERFaceDataModule(pl.LightningDataModule):
             A.augmentations.transforms.GlassBlur(sigma=0.1, max_delta=1, iterations=1, p=0.2),
             A.augmentations.transforms.MotionBlur(p=0.2),
             ToTensorV2(),
-        ], bbox_params=A.BboxParams(format='coco'))
+        ], bbox_params=A.BboxParams(format='coco', min_area=10))
         return training_transform
 
     def default_transform(self):
         default_transform = A.Compose([
             A.Resize(width=self.input_shape[1], height=self.input_shape[0]),
             ToTensorV2(),
-        ], bbox_params=A.BboxParams(format='coco'))
+        ], bbox_params=A.BboxParams(format='coco', min_area=10))
         return default_transform
 
     def setup(self, stage=None):

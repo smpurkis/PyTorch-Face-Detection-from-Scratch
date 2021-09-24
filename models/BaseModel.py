@@ -8,7 +8,7 @@ from torchvision.transforms import transforms
 from datasets.utils import ReduceBoundingBoxes
 
 class BaseModel(nn.Module):
-    def __init__(self, filters, input_shape, num_of_patches=16, probability_threshold=0.5, iou_threshold=0.5):
+    def __init__(self, filters, input_shape, num_of_patches, probability_threshold=0.5, iou_threshold=0.5):
         super().__init__()
         self.input_shape = input_shape
         self.num_of_patches = num_of_patches
