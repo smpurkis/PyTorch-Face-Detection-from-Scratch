@@ -1,16 +1,17 @@
 from multiprocessing import cpu_count
 from pathlib import Path
 
+import albumentations as A
 import gdown
 import pytorch_lightning as pl
 import torch
+import tqdm
+from albumentations.pytorch.transforms import ToTensorV2
 from torch.utils.data import DataLoader
 from torchvision import transforms
-import tqdm
-from datasets.WIDERFace.dataset import WIDERFaceDataset
+
+from datasets.WIDERFace.dataset_ssd import WIDERFaceDatasetSSD
 from datasets.utils import draw_bbx
-import albumentations as A
-from albumentations.pytorch.transforms import ToTensorV2
 
 dataset_links = {
     "train": {
@@ -32,7 +33,7 @@ dataset_links = {
 }
 
 
-class WIDERFaceDataModule(pl.LightningDataModule):
+class WIDERFaceDataModuleSSD(pl.LightningDataModule):
     def __init__(self, root_dir: str = "./", input_shape=(320, 240), num_of_patches: int = 20, batch_size: int = 8,
                  shuffle: bool = False):
         super().__init__()
@@ -114,7 +115,7 @@ class WIDERFaceDataModule(pl.LightningDataModule):
         return default_transform
 
     def setup(self, stage=None):
-        self.train_dataset = WIDERFaceDataset(
+        self.train_dataset = WIDERFaceDatasetSSD(
             data_dir=self.data_dir,
             split="train",
             num_of_patches=self.num_of_patches,
@@ -122,7 +123,7 @@ class WIDERFaceDataModule(pl.LightningDataModule):
             input_shape=self.input_shape,
             targets=self.get_targets(split="train")
         )
-        self.val_dataset = WIDERFaceDataset(
+        self.val_dataset = WIDERFaceDatasetSSD(
             data_dir=self.data_dir,
             split="val",
             num_of_patches=self.num_of_patches,
@@ -130,7 +131,7 @@ class WIDERFaceDataModule(pl.LightningDataModule):
             input_shape=self.input_shape,
             targets=self.get_targets(split="val")
         )
-        self.test_dataset = WIDERFaceDataset(
+        self.test_dataset = WIDERFaceDatasetSSD(
             data_dir=self.data_dir,
             split="test",
             num_of_patches=self.num_of_patches,

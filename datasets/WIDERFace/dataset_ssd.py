@@ -6,10 +6,12 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
+from datasets.utils import ReduceSSDBoundingBoxes
+
 torch.set_printoptions(sci_mode=False)
 
 
-class WIDERFaceDataset(Dataset):
+class WIDERFaceDatasetSSD(Dataset):
     def __init__(
             self,
             data_dir,
@@ -24,19 +26,22 @@ class WIDERFaceDataset(Dataset):
         self.targets = targets
         self.num_of_patches = num_of_patches
         self.input_shape = input_shape
+        self.patch_sizes = (60, 30, 15, 7)
 
     def __len__(self):
-        # return 2
         return len(self.targets)
 
-    def convert_bbx_to_feature_map(self, bbx, img_size):
-        feature_map = fm = torch.zeros((5, self.num_of_patches, self.num_of_patches))
+    def convert_bbx_to_feature_map(self, bbx, img_size, patch_size):
+        feature_map = fm = torch.zeros((5, patch_size, patch_size))
         width, height = img_size
+        bbx = torch.clone(bbx)
+        bbx[:, [1, 3]] = bbx[:, [1, 3]] / width
+        bbx[:, [2, 4]] = bbx[:, [2, 4]] / height
 
         # Calculate the number of pixels in height and width to get the desired number of patches
         x_patch_size, y_patch_size = (
-            width / self.num_of_patches,
-            height / self.num_of_patches,
+            1 / patch_size,
+            1 / patch_size,
         )
         for k, bx in enumerate(bbx):
             # Get position indices to place the bbx at
@@ -55,11 +60,11 @@ class WIDERFaceDataset(Dataset):
             normalized_bx[1] = normalized_bx[1] / x_patch_size
             normalized_bx[2] = normalized_bx[2] / y_patch_size
 
-            normalized_bx[3] = normalized_bx[3] / width
-            normalized_bx[4] = normalized_bx[4] / height
+            # normalized_bx[3] = normalized_bx[3] / width
+            # normalized_bx[4] = normalized_bx[4] / height
 
-            i = min(max(i, 0), self.num_of_patches - 1)
-            j = min(max(j, 0), self.num_of_patches - 1)
+            i = min(max(i, 0), patch_size - 1)
+            j = min(max(j, 0), patch_size - 1)
             fm[:, i, j] = normalized_bx
         return feature_map
 
@@ -118,18 +123,22 @@ class WIDERFaceDataset(Dataset):
             # bbx2[:, [2, 4]] = torch.round(bbx2[:, [2, 4]] * self.input_shape[1] / original_img_size[1])
             # draw_bbx(img, bbx2, self.input_shape, show=True)
             # draw_bbx(img_og, bbx, original_img_size)
-
-            fm = self.convert_bbx_to_feature_map(bbx, self.input_shape)
+            feature_maps = []
+            for patch_size in self.patch_sizes:
+                fm = self.convert_bbx_to_feature_map(bbx, self.input_shape, patch_size)
+                fm = fm.permute(1, 2, 0).reshape(-1, 5)
+                feature_maps.append(fm)
+            feature_map = torch.cat(feature_maps, dim=0)
             # draw_bbx(img_og, fm, original_img_size, show=True)
 
-            # reduce_bounding_boxes = ReduceBoundingBoxes(
-            #     0.5, 0.5, (3, *self.input_shape), self.num_of_patches
-            # )
-            # s = reduce_bounding_boxes(torch.clone(fm))
+            reduce_bounding_boxes = ReduceSSDBoundingBoxes(
+                0.5, 0.5, (3, *self.input_shape), self.patch_sizes
+            )
+            s = reduce_bounding_boxes(torch.clone(feature_map))
             # # draw_bbx(img, s, self.input_shape, show=True)
             #
-            # b = torch.sort(bbx, dim=0)
-            # bb = torch.sort(s, dim=0)
+            b = torch.sort(bbx, dim=0)
+            bb = torch.sort(s, dim=0)
             #
             # try:
             #     torch.all(b.values == bb.values)
@@ -144,7 +153,7 @@ class WIDERFaceDataset(Dataset):
             # img = normalization_transform(img/255)
 
             img = img / 255
-            return img, fm, bbx
+            return img, feature_map, bbx
         except Exception as e:
             Path("incorrect_indices.log").open("a").write(f"{index}, {img_path}\n")
             return self[index - 1 if index != 0 else 0]
