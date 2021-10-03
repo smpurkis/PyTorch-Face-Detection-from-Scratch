@@ -4,6 +4,8 @@ from torchinfo import summary
 from torchvision.transforms import transforms
 
 from datasets.utils import ReduceBoundingBoxes, ReduceSSDBoundingBoxes
+from ptflops import get_model_complexity_info
+
 
 
 class BaseSSDModel(nn.Module):
@@ -13,15 +15,19 @@ class BaseSSDModel(nn.Module):
         self.probability_threshold = probability_threshold
         self.iou_threshold = iou_threshold
 
-    def summary(self):
+    def summary(self, *args, **kwargs):
         if self.input_shape is None:
             raise Exception("Please set 'input_shape'")
         else:
             self(torch.rand((1, *self.input_shape)).to(torch.device("cuda" if torch.cuda.is_available() else "cpu")))
-            print(summary(self, (1, *self.input_shape)))
+            print(summary(self, (1, *self.input_shape), *args, **kwargs))
+        macs, params = get_model_complexity_info(self, self.input_shape, as_strings=True,
+                                                 print_per_layer_stat=True, verbose=True)
+        print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
+        print('{:<30}  {:<8}'.format('Number of parameters: ', params))
 
     def non_max_suppression(self, x):
-        if len(x.shape) == 4:
+        if len(x.shape) == 3:
             return tuple([self.reduce_bounding_boxes(x[i]) for i in range(x.shape[0])])
         else:
             return self.reduce_bounding_boxes(x)

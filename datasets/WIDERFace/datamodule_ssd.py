@@ -87,22 +87,22 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
         for target in targets:
             # target["bbx"] = [t for t in target["bbx"] if t[3] >= 10 and t[4] >= 10]
             target["bbx"] = torch.tensor(target["bbx"])
-        targets = [t for t in targets if t["bbx"].size(0) > 20]
+        # targets = [t for t in targets if t["bbx"].size(0) > 50]
         # targets = [targets[0]]
-        # targets = [t for t in targets if t["bbx"].size(0) < 3]
+        targets = [t for t in targets if t["bbx"].size(0) == 1]
         return targets
 
     def training_transform(self):
         training_transform = A.Compose([
-            A.augmentations.crops.transforms.RandomResizedCrop(width=self.input_shape[1], height=self.input_shape[0], p=0.2),
+            # A.augmentations.crops.transforms.RandomResizedCrop(width=self.input_shape[1], height=self.input_shape[0], p=0.2),
             # A.augmentations.crops.transforms.RandomSizedBBoxSafeCrop(width=1.5*self.input_shape[1], height=1.5*self.input_shape[0], p=0.2),
             A.Resize(width=self.input_shape[1], height=self.input_shape[0]),
-            A.HorizontalFlip(p=0.5),
-            A.RandomBrightnessContrast(p=0.2),
-            A.augmentations.geometric.rotate.Rotate(20, p=0.2),
-            A.augmentations.transforms.GaussNoise(var_limit=400.0, p=0.2),
-            A.augmentations.transforms.GlassBlur(sigma=0.1, max_delta=1, iterations=1, p=0.2),
-            A.augmentations.transforms.MotionBlur(p=0.2),
+            # A.HorizontalFlip(p=0.5),
+            # A.RandomBrightnessContrast(p=0.2),
+            # A.augmentations.geometric.rotate.Rotate(20, p=0.2),
+            # A.augmentations.transforms.GaussNoise(var_limit=400.0, p=0.2),
+            # A.augmentations.transforms.GlassBlur(sigma=0.1, max_delta=1, iterations=1, p=0.2),
+            # A.augmentations.transforms.MotionBlur(p=0.2),
             ToTensorV2(),
         ], bbox_params=A.BboxParams(format='coco', min_area=10))
         return training_transform
@@ -152,7 +152,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=self.shuffle,
             collate_fn=self.my_collate,
-            num_workers=cpu_count()//2
+            # num_workers=cpu_count()//2
         )
 
     def val_dataloader(self):
@@ -160,7 +160,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             self.val_dataset,
             batch_size=self.batch_size,
             collate_fn=self.my_collate,
-            num_workers=cpu_count()//2
+            # num_workers=cpu_count()//2
         )
 
     def test_dataloader(self):
@@ -168,7 +168,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             collate_fn=self.my_collate,
-            num_workers=cpu_count()//2
+            # num_workers=cpu_count()//2
         )
 
     def teardown(self, stage=None):

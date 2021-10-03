@@ -127,7 +127,7 @@ class ModelMetaSSD(LightningModule):
         y_hat = self.forward(x)
         loss = 0
 
-        if batch_idx == 0 and self.current_epoch % 2 == 0:
+        if batch_idx == 0:
             # gt_bbx_check = self.model.non_max_suppression(y)
             pred_bbx = self.model.non_max_suppression(y_hat)
             test_img = x[0]
@@ -159,7 +159,7 @@ class ModelMetaSSD(LightningModule):
         for i in range(y.shape[0]):
             predicted_boxes = y_hat[i]
             ground_truth_boxes = y[i]
-            loss += yolo_loss(predicted_boxes, ground_truth_boxes)
+            loss += ssd_loss(predicted_boxes, ground_truth_boxes)
             # reduce_bounding_boxes = ReduceBoundingBoxes(
             #     probability_threshold=0.5,
             #     iou_threshold=0.5,

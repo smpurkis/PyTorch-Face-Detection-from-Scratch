@@ -7,7 +7,7 @@ from torchvision.ops import nms
 
 class ReduceSSDBoundingBoxes(nn.Module):
     def __init__(self, probability_threshold: float = 0.9, iou_threshold: float = 0.5, input_shape=(3, 320, 240),
-                 patch_sizes=(60, 30, 15, 7), priors=None):
+                 patch_sizes=(60, 30, 15, 7), priors=None, with_priors=False):
         super().__init__()
         self.probability_threshold = probability_threshold
         self.iou_threshold = iou_threshold
@@ -15,7 +15,8 @@ class ReduceSSDBoundingBoxes(nn.Module):
         _, self.width, self.height = input_shape
         self.patch_sizes = patch_sizes
         self.multiply_priors = torch.unsqueeze(
-            torch.cat([torch.tensor(1 / ps).repeat(ps * ps) for ps in self.patch_sizes]), dim=1)
+            torch.cat([torch.tensor(1/ps).repeat(ps * ps) for ps in self.patch_sizes]), dim=1)
+        self.with_priors = with_priors
         if priors is not None:
             self.priors = priors
         else:
@@ -43,11 +44,13 @@ class ReduceSSDBoundingBoxes(nn.Module):
         return bbx, torch.tensor(1)
 
     def scale_batch_bbx_xywh(self, x):
-        mask = torch.where(x[:, 0] > self.probability_threshold)[0]
-        x = x.float()
         scaled_x = torch.clone(x).float()
-        scaled_x[mask, 1:3] = scaled_x[mask, 1:3] * torch.unsqueeze(self.multiply_priors[mask], dim=0)
-        scaled_x[mask, 1:5] = scaled_x[mask, 1:5] + torch.unsqueeze(self.priors[mask], dim=0)
+        if self.with_priors:
+            self.multiply_priors = self.multiply_priors.to(x.device)
+            self.priors = self.priors.to(x.device)
+            scaled_x[:, 1:2] = scaled_x[:, 1:2] * self.multiply_priors
+            scaled_x[:, 2:3] = scaled_x[:, 2:3] * self.multiply_priors
+            scaled_x[:, 1:5] = scaled_x[:, 1:5] + self.priors
         scaled_x[:, [1, 3]] = scaled_x[:, [1, 3]] * self.width
         scaled_x[:, [2, 4]] = scaled_x[:, [2, 4]] * self.height
         return scaled_x
@@ -68,8 +71,8 @@ class ReduceSSDBoundingBoxes(nn.Module):
         if boxes_exist == 1:
             x = self.convert_batch_to_xyxy(x)
             bbx = torch.round(x[:, 1:])
+            # x = torch.clamp(bbx, 0.0, 1.0)
             scores = x[:, 0]
-            breakpoint()
             bbxis = nms(boxes=bbx, scores=scores, iou_threshold=self.iou_threshold)
             x = torch.cat([scores.view(-1, 1), bbx], dim=1)
             out = self.convert_batch_to_xywh(x[bbxis])
@@ -150,8 +153,11 @@ def draw_bbx(img, bbx, input_shape=(320, 240), save_name="image", show=False):
     if isinstance(bbxs, torch.Tensor):
         if len(bbxs.shape) == 3:
             num_of_patches = bbxs.shape[1]
-            reduce_bounding_boxes = ReduceBoundingBoxes(0.9, 0.5, (3, *input_shape), num_of_patches)
+            reduce_bounding_boxes = ReduceBoundingBoxes(0.5, 0.5, (3, *input_shape), num_of_patches)
             bbxs = reduce_bounding_boxes(bbxs)
+        # elif len(bbxs.shape) == 2:
+        #     reduce_bounding_boxes = ReduceSSDBoundingBoxes(0.5, 0.5, input_shape)
+        #     bbxs = reduce_bounding_boxes(bbxs)
     elif isinstance(bbxs, list):
         pass
     if isinstance(img, torch.Tensor):

@@ -7,9 +7,11 @@ from torchvision.transforms import transforms
 from datasets.utils import ReduceSSDBoundingBoxes
 from models.BaseSSDModel import BaseSSDModel
 
+torch.set_printoptions(sci_mode=False)
+
 
 class SeparableResidualBlock(nn.Module):
-    def __init__(self, in_filters, out_filters, dropout=0.25, use_max_pool=False, bias=False):
+    def __init__(self, in_filters, out_filters, dropout=0.25, use_max_pool=False, bias=True):
         super().__init__()
         self.in_filters = in_filters
         self.out_filters = out_filters
@@ -23,19 +25,33 @@ class SeparableResidualBlock(nn.Module):
                 padding=0,
                 bias=bias
             )
-        self.depthwise_conv = nn.Conv2d(
+        # self.depthwise_conv = nn.Conv2d(
+        #     in_channels=in_filters,
+        #     out_channels=out_filters,
+        #     kernel_size=(3, 3),
+        #     padding=1,
+        #     groups=in_filters,
+        #     bias=bias
+        # )
+        # self.pointwise_conv = nn.Conv2d(
+        #     in_channels=out_filters,
+        #     out_channels=out_filters,
+        #     kernel_size=(1, 1),
+        #     padding=0,
+        #     bias=bias
+        # )
+        self.conv1 = nn.Conv2d(
             in_channels=in_filters,
             out_channels=out_filters,
             kernel_size=(3, 3),
             padding=1,
-            groups=in_filters,
             bias=bias
         )
-        self.pointwise_conv = nn.Conv2d(
+        self.conv2 = nn.Conv2d(
             in_channels=out_filters,
             out_channels=out_filters,
-            kernel_size=(1, 1),
-            padding=0,
+            kernel_size=(3, 3),
+            padding=1,
             bias=bias
         )
         self.use_max_pool = use_max_pool
@@ -48,9 +64,12 @@ class SeparableResidualBlock(nn.Module):
             skip_x = x
         else:
             skip_x = self.pointwise_conv_skip(x)
-        x = self.depthwise_conv(x)
+        # x = self.depthwise_conv(x)
+        # x = self.leaky_relu(x)
+        # x = self.pointwise_conv(x)
+        x = self.conv1(x)
         x = self.leaky_relu(x)
-        x = self.pointwise_conv(x)
+        x = self.conv2(x)
         x = self.leaky_relu(x)
         x = self.dropout2d(x)
         x = x + skip_x
@@ -62,7 +81,9 @@ class SeparableResidualBlock(nn.Module):
 class SSD(BaseSSDModel):
     def __init__(self, filters, input_shape, probability_threshold=0.5, iou_threshold=0.5, priors=None):
         super().__init__(filters, input_shape, probability_threshold=probability_threshold, iou_threshold=iou_threshold)
-        self.patch_sizes = (60, 30, 15, 7)
+        # self.patch_sizes = (60, 30, 15, 7)
+        self.patch_sizes = (2,)
+        _, self.height, self.width = input_shape
 
         # regular functions
         self.dropout2d = nn.Dropout2d(0.5)
@@ -70,6 +91,8 @@ class SSD(BaseSSDModel):
         self.resize = transforms.Resize(size=self.input_shape[1:])
         self.min_filters = filters
         self.max_filters = 16 * filters
+        self.multiply_priors = torch.unsqueeze(
+            torch.cat([torch.tensor(1/ps).repeat(ps * ps) for ps in self.patch_sizes]), dim=1)
         if priors:
             self.priors = priors
         else:
@@ -88,13 +111,18 @@ class SSD(BaseSSDModel):
             kernel_size=(3, 3),
             stride=(2, 2),
             padding=1,
-            bias=False
+            bias=True
         )
         self.feature_extractor = nn.Sequential(
-            SeparableResidualBlock(in_filters=filters, out_filters=2 * filters, use_max_pool=True),
+            SeparableResidualBlock(in_filters=filters, out_filters=2 * filters, use_max_pool=False),
             SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=True),
             SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=False),
-            SeparableResidualBlock(in_filters=2 * filters, out_filters=4 * filters, use_max_pool=False)
+            SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=False),
+            SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=False),
+            SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=False),
+            SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=True),
+            SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=True),
+            SeparableResidualBlock(in_filters=2 * filters, out_filters=4 * filters, use_max_pool=True)
         )
         continue_layers = []
         extracting_layers = []
@@ -115,6 +143,7 @@ class SSD(BaseSSDModel):
             extracting_layers.append(extracting_layer)
         self.continue_layers = nn.ModuleList(continue_layers)
         self.extracting_layers = nn.ModuleList(extracting_layers)
+        self.avg_pooling = nn.AdaptiveAvgPool2d(2)
 
     def calculate_priors(self):
         priors_list = []
@@ -130,6 +159,21 @@ class SSD(BaseSSDModel):
         priors = torch.cat(priors_list, dim=0)
         return priors
 
+    def apply_priors(
+            self,
+            x: torch.Tensor
+    ) -> torch.Tensor:
+        bs = x.size(0)
+        self.multiply_priors = self.multiply_priors.to(x.device)
+        self.priors = self.priors.to(x.device)
+        scaled_x = torch.clone(x).float()
+        scaled_x[..., 1:2] = scaled_x[..., 1:2] * self.multiply_priors.repeat(repeats=(bs, 1, 1))
+        scaled_x[..., 2:3] = scaled_x[..., 2:3] * self.multiply_priors.repeat(repeats=(bs, 1, 1))
+        scaled_x[..., 1:5] = scaled_x[..., 1:5] + self.priors.repeat(repeats=(bs, 1, 1))
+        # scaled_x[..., [1, 3]] = scaled_x[..., [1, 3]] * self.width
+        # scaled_x[..., [2, 4]] = scaled_x[..., [2, 4]] * self.height
+        return scaled_x
+
     def forward(
             self, x: torch.Tensor,
             predict: torch.Tensor = torch.tensor(0)
@@ -140,28 +184,41 @@ class SSD(BaseSSDModel):
             if len(x.shape) == 3:
                 x = torch.unsqueeze(x, 0)
         x = self.input_normalizer(x)
+        if torch.any(torch.isnan(x)):
+            p = 0
         x = self.feature_extractor(x)
+        if torch.any(torch.isnan(x)):
+            p = 0
         scores, bbxs = [], []
         for i in range(len(self.continue_layers)):
             x = self.continue_layers[i](x)
+            # x = self.avg_pooling(x)
+            if torch.any(torch.isnan(x)):
+                p = 0
             z = self.extracting_layers[i](x.permute(0, 2, 3, 1).contiguous())
             z = z.reshape(bs, -1, 5)
+            z = z[:, :4, :]
             scores.append(z[..., :1])
             bbxs.append(z[..., 1:5])
         scores = self.sigmoid(torch.cat(scores, dim=1))
+        # bbxs = self.sigmoid(torch.cat(bbxs, dim=1))
         bbxs = torch.cat(bbxs, dim=1)
-        if predict == 0:
-            # bbxs = self.non_max_suppression(bbxs)
-            mask = scores[..., 0] > self.probability_threshold
-            bbxs = bbxs[mask, :]
-        return scores, bbxs
+        bbxs = torch.clamp(bbxs, 0.001, 0.999)
+        x = torch.cat([scores, bbxs], dim=2)
+        x = self.apply_priors(x)
+        # print("\n", scores.min(), scores.mean(), scores.max())
+        if torch.any(torch.isnan(x)):
+            p = 0
+        if predict == 1:
+            x = self.non_max_suppression(x)
+        return x
 
 
 if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = ""
     input_shape = (480, 480)
     bm = SSD(
-        filters=16,
+        filters=32,
         input_shape=(3, *input_shape),
     ).cpu()
     bm.eval()
