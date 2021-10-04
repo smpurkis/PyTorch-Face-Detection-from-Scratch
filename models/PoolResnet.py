@@ -2,6 +2,7 @@ import os
 
 import torch
 import torch.nn as nn
+from einops import rearrange
 from torchvision.transforms import transforms
 
 from models import BaseModel
@@ -97,7 +98,7 @@ if __name__ == '__main__':
     bm = PoolResnet(
         filters=64,
         input_shape=(3, *input_shape),
-        num_of_patches=15,
+        num_of_patches=10,
         num_of_residual_blocks=10
     ).cpu()
     bm.eval()

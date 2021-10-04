@@ -22,7 +22,7 @@ def yolo_loss(pred_fm, gt_fm):
     object_in_cell = gt_conf
     empty_cell = 1 - gt_conf
     coord_weight = 3
-    no_object_weight = 1 / num_of_patches**0.5
+    no_object_weight = 1 / num_of_patches
 
     xy_loss = coord_weight * object_in_cell * ((gt_x - pred_x) ** 2 + (gt_y - pred_y) ** 2)
     wh_loss = coord_weight * object_in_cell * ((gt_w ** 0.5 - pred_w ** 0.5) ** 2 + (gt_h ** 0.5 - pred_h ** 0.5) ** 2)

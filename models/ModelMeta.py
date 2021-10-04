@@ -129,7 +129,7 @@ class ModelMeta(LightningModule):
         y_hat = self.forward(x)
         loss = 0
 
-        if batch_idx == 0 and self.current_epoch % 2 == 0:
+        if batch_idx == 0:
             # gt_bbx_check = self.model.non_max_suppression(y)
             pred_bbx = self.model.non_max_suppression(y_hat)
             test_img = x[0]

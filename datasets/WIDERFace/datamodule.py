@@ -86,9 +86,9 @@ class WIDERFaceDataModule(pl.LightningDataModule):
         for target in targets:
             # target["bbx"] = [t for t in target["bbx"] if t[3] >= 10 and t[4] >= 10]
             target["bbx"] = torch.tensor(target["bbx"])
-        targets = [t for t in targets if t["bbx"].size(0) > 20]
+        # targets = [t for t in targets if t["bbx"].size(0) > 20]
         # targets = [targets[0]]
-        # targets = [t for t in targets if t["bbx"].size(0) < 3]
+        targets = [t for t in targets if t["bbx"].size(0) < 3]
         return targets
 
     def training_transform(self):

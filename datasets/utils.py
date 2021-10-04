@@ -15,7 +15,7 @@ class ReduceSSDBoundingBoxes(nn.Module):
         _, self.width, self.height = input_shape
         self.patch_sizes = patch_sizes
         self.multiply_priors = torch.unsqueeze(
-            torch.cat([torch.tensor(1/ps).repeat(ps * ps) for ps in self.patch_sizes]), dim=1)
+            torch.cat([torch.tensor(1 / ps).repeat(ps * ps) for ps in self.patch_sizes]), dim=1)
         self.with_priors = with_priors
         if priors is not None:
             self.priors = priors
@@ -27,8 +27,8 @@ class ReduceSSDBoundingBoxes(nn.Module):
         for ps in self.patch_sizes:
             priors = torch.zeros((4, ps, ps))
             i, j = torch.where(priors[0] >= 0)
-            priors[0, i, j] = priors[0, i, j] + 1 / ps * i
-            priors[1, i, j] = priors[1, i, j] + 1 / ps * j
+            priors[0, i, j] = priors[0, i, j] + (1 / ps * i)
+            priors[1, i, j] = priors[1, i, j] + (1 / ps * j)
             priors[2, i, j] = priors[2, i, j]
             priors[3, i, j] = priors[3, i, j]
             priors = priors.permute(1, 2, 0).reshape(ps * ps, 4)
@@ -109,6 +109,16 @@ class ReduceBoundingBoxes(nn.Module):
         scaled_x[4, i, j] = x[4, i, j] * self.height
         return scaled_x
 
+    def apply_priors(self, x):
+        n, i, j = torch.where(x[:, 0] > self.probability_threshold)
+        x = x.float()
+        scaled_x = torch.clone(x).float()
+        scaled_x[n, 1, i, j] = x[n, 1, i, j] * self.x_patch_size + i * self.x_patch_size
+        scaled_x[n, 2, i, j] = x[n, 2, i, j] * self.y_patch_size + j * self.y_patch_size
+        scaled_x[n, 3, i, j] = x[n, 3, i, j] * self.width
+        scaled_x[n, 4, i, j] = x[n, 4, i, j] * self.height
+        return scaled_x
+
     def scale_batch_bbx(self, x):
         i, j = torch.where(x[0] > self.probability_threshold)
         scaled_x = torch.clone(x).float()
@@ -148,6 +158,7 @@ def convert_bbx_to_xyxy(bbx):
     return bbx[0], bbx[1], bbx[0] + bbx[2], bbx[1] + bbx[3]
 
 
+@torch.no_grad()
 def draw_bbx(img, bbx, input_shape=(320, 240), save_name="image", show=False):
     bbxs = bbx
     if isinstance(bbxs, torch.Tensor):

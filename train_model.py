@@ -12,23 +12,23 @@ from models.MobilenetV3Backbone import MobilenetV3Backbone
 if __name__ == "__main__":
     torch.random.manual_seed(0)
 
-    num_of_patches = nop = 15
+    num_of_patches = nop = 10
     input_shape = (480, 480)
-    # filters = 128
-    filters = 576
+    filters = 128
+    # filters = 576
     lr = 1e-4
 
-    name = f"pretrained_mobilenetv3backbone_{filters}_{nop}x{nop}_{input_shape[0]}x{input_shape[1]}_sam_adam_all_data2"
-    # name = f"custom_poolresnet_{filters}_{nop}x{nop}_{input_shape[0]}x{input_shape[1]}_sam_adam_all_data2"
+    # name = f"pretrained_mobilenetv3backbone_{filters}_{nop}x{nop}_{input_shape[0]}x{input_shape[1]}_sam_adam_all_data2"
+    name = f"custom_poolresnet_{filters}_{nop}x{nop}_{input_shape[0]}x{input_shape[1]}_sam_adam_all_data2"
     log_path = Path(f"logs/out_{name}.log")
     log_path.unlink(missing_ok=True)
     model_save_path = f"./saved_models/{name}.pth"
 
-    model = MobilenetV3Backbone(
+    model = PoolResnet(
         filters=filters,
         input_shape=(3, *input_shape),
         num_of_patches=num_of_patches,
-        # num_of_residual_blocks=10,
+        num_of_residual_blocks=10,
     ).cuda()
 
     model.summary()
