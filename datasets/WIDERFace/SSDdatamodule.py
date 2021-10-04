@@ -10,7 +10,7 @@ from albumentations.pytorch.transforms import ToTensorV2
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from datasets.WIDERFace.dataset_ssd import WIDERFaceDatasetSSD
+from datasets.WIDERFace.SSDdataset import SSDWIDERFaceDataset
 from datasets.utils import draw_bbx
 
 dataset_links = {
@@ -33,8 +33,8 @@ dataset_links = {
 }
 
 
-class WIDERFaceDataModuleSSD(pl.LightningDataModule):
-    def __init__(self, root_dir: str = "./", input_shape=(320, 240), num_of_patches: int = 20, batch_size: int = 8,
+class SSDWIDERFaceDataModule(pl.LightningDataModule):
+    def __init__(self, root_dir: str = "./", input_shape=(320, 240), num_of_patches: tuple = (20,), batch_size: int = 8,
                  shuffle: bool = False):
         super().__init__()
         self.root_dir = root_dir
@@ -87,22 +87,23 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
         for target in targets:
             # target["bbx"] = [t for t in target["bbx"] if t[3] >= 10 and t[4] >= 10]
             target["bbx"] = torch.tensor(target["bbx"])
-        # targets = [t for t in targets if t["bbx"].size(0) > 50]
+        # targets = [t for t in targets if t["bbx"].size(0) > 20]
         # targets = [targets[0]]
-        targets = [t for t in targets if t["bbx"].size(0) == 1]
+        targets = [t for t in targets if t["bbx"].size(0) < 3]
         return targets
 
     def training_transform(self):
         training_transform = A.Compose([
-            # A.augmentations.crops.transforms.RandomResizedCrop(width=self.input_shape[1], height=self.input_shape[0], p=0.2),
+            A.augmentations.crops.transforms.RandomResizedCrop(width=self.input_shape[1], height=self.input_shape[0],
+                                                               p=0.2),
             # A.augmentations.crops.transforms.RandomSizedBBoxSafeCrop(width=1.5*self.input_shape[1], height=1.5*self.input_shape[0], p=0.2),
             A.Resize(width=self.input_shape[1], height=self.input_shape[0]),
-            # A.HorizontalFlip(p=0.5),
-            # A.RandomBrightnessContrast(p=0.2),
-            # A.augmentations.geometric.rotate.Rotate(20, p=0.2),
-            # A.augmentations.transforms.GaussNoise(var_limit=400.0, p=0.2),
-            # A.augmentations.transforms.GlassBlur(sigma=0.1, max_delta=1, iterations=1, p=0.2),
-            # A.augmentations.transforms.MotionBlur(p=0.2),
+            A.HorizontalFlip(p=0.5),
+            A.RandomBrightnessContrast(p=0.2),
+            A.augmentations.geometric.rotate.Rotate(20, p=0.2),
+            A.augmentations.transforms.GaussNoise(var_limit=400.0, p=0.2),
+            A.augmentations.transforms.GlassBlur(sigma=0.1, max_delta=1, iterations=1, p=0.2),
+            A.augmentations.transforms.MotionBlur(p=0.2),
             ToTensorV2(),
         ], bbox_params=A.BboxParams(format='coco', min_area=10))
         return training_transform
@@ -115,7 +116,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
         return default_transform
 
     def setup(self, stage=None):
-        self.train_dataset = WIDERFaceDatasetSSD(
+        self.train_dataset = SSDWIDERFaceDataset(
             data_dir=self.data_dir,
             split="train",
             num_of_patches=self.num_of_patches,
@@ -123,7 +124,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             input_shape=self.input_shape,
             targets=self.get_targets(split="train")
         )
-        self.val_dataset = WIDERFaceDatasetSSD(
+        self.val_dataset = SSDWIDERFaceDataset(
             data_dir=self.data_dir,
             split="val",
             num_of_patches=self.num_of_patches,
@@ -131,7 +132,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             input_shape=self.input_shape,
             targets=self.get_targets(split="val")
         )
-        self.test_dataset = WIDERFaceDatasetSSD(
+        self.test_dataset = SSDWIDERFaceDataset(
             data_dir=self.data_dir,
             split="test",
             num_of_patches=self.num_of_patches,
@@ -141,7 +142,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
 
     def my_collate(self, batch):
         data = torch.stack([item[0] for item in batch])
-        target = torch.stack([item[1] for item in batch])
+        target = [torch.stack([item[1][i] for item in batch]) for i in range(len(batch[0][1]))]
         gt_bbx = [item[2] for item in batch]
         # target = [item[1] for item in batch]
         return [data, target, gt_bbx]
@@ -152,7 +153,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=self.shuffle,
             collate_fn=self.my_collate,
-            # num_workers=cpu_count()//2
+            num_workers=cpu_count() // 2
         )
 
     def val_dataloader(self):
@@ -160,7 +161,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             self.val_dataset,
             batch_size=self.batch_size,
             collate_fn=self.my_collate,
-            # num_workers=cpu_count()//2
+            num_workers=cpu_count() // 2
         )
 
     def test_dataloader(self):
@@ -168,7 +169,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             collate_fn=self.my_collate,
-            # num_workers=cpu_count()//2
+            num_workers=cpu_count() // 2
         )
 
     def teardown(self, stage=None):
@@ -177,9 +178,9 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
 
 if __name__ == '__main__':
     input_shape = (320, 320)
-    dm = WIDERFaceDataModule(
+    dm = SSDWIDERFaceDataModule(
         "/home/sam/PycharmProjects/python/PyTorch-Face-Detection-from-Scratch",
-        num_of_patches=1,
+        num_of_patches=(10,),
         input_shape=input_shape
     )
     dm.setup()

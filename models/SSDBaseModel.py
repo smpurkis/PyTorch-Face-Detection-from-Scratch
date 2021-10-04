@@ -1,19 +1,26 @@
+import albumentations as A
 import torch
 import torch.nn as nn
+from albumentations.pytorch.transforms import ToTensorV2
+from ptflops import get_model_complexity_info
 from torchinfo import summary
 from torchvision.transforms import transforms
 
-from datasets.utils import ReduceBoundingBoxes, ReduceSSDBoundingBoxes
-from ptflops import get_model_complexity_info
+from datasets.utils import ReduceBoundingBoxes
 
-
-
-class BaseSSDModel(nn.Module):
-    def __init__(self, filters, input_shape, probability_threshold=0.5, iou_threshold=0.5, priors=None):
+class SSDBaseModel(nn.Module):
+    def __init__(self, filters, input_shape, num_of_patches, probability_threshold=0.5, iou_threshold=0.5):
         super().__init__()
         self.input_shape = input_shape
+        self.num_of_patches = num_of_patches
         self.probability_threshold = probability_threshold
         self.iou_threshold = iou_threshold
+        self.reduce_bounding_boxes = [ReduceBoundingBoxes(
+            probability_threshold=probability_threshold,
+            iou_threshold=iou_threshold,
+            input_shape=self.input_shape,
+            num_of_patches=num_of_patch
+        ) for num_of_patch in self.num_of_patches]
 
     def summary(self, *args, **kwargs):
         if self.input_shape is None:
@@ -27,21 +34,26 @@ class BaseSSDModel(nn.Module):
         print('{:<30}  {:<8}'.format('Number of parameters: ', params))
 
     def non_max_suppression(self, x):
-        if len(x.shape) == 3:
-            return tuple([self.reduce_bounding_boxes(x[i]) for i in range(x.shape[0])])
-        else:
-            return self.reduce_bounding_boxes(x)
+        fm_bbxs = []
+        bs = x[0].shape[0]
+        for i, fm in enumerate(x):
+            fm_bbxs.append(tuple([self.reduce_bounding_boxes[i](fm[j]) for j in range(bs)]))
+        bbxs = []
+        for i in range(bs):
+            bbxs.append(torch.cat([fm_bbx[i] for fm_bbx in fm_bbxs], dim=0))
+        return bbxs
 
     def single_non_max_suppression(self, x):
-        return self.reduce_bounding_boxes(x)
+        bbxs = torch.cat([reduce_bounding_boxes(x[i]) for i, reduce_bounding_boxes in enumerate(self.reduce_bounding_boxes)], dim=0)
+        return bbxs
 
     @torch.no_grad()
     def predict(self, x, probability_threshold=0.5, iou_threshold=0.5):
-        self.reduce_bounding_boxes = ReduceSSDBoundingBoxes(
+        self.reduce_bounding_boxes = ReduceBoundingBoxes(
             probability_threshold=probability_threshold,
             iou_threshold=iou_threshold,
             input_shape=self.input_shape,
-            patch_sizes=self.patch_sizes
+            num_of_patches=self.num_of_patches
         )
         x = transforms.Resize(size=self.input_shape[1:])(x)
         x = x / 255.

@@ -109,6 +109,7 @@ class ReduceBoundingBoxes(nn.Module):
         scaled_x[4, i, j] = x[4, i, j] * self.height
         return scaled_x
 
+
     def apply_priors(self, x):
         n, i, j = torch.where(x[:, 0] > self.probability_threshold)
         x = x.float()

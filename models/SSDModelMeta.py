@@ -1,12 +1,12 @@
 from pathlib import Path
 
+import closure as closure
 import torch
 from pytorch_lightning import LightningModule
-from torch.optim._multi_tensor import Adam
+from torch.optim._multi_tensor import SGD, Adam
 from torchvision.ops import box_iou
 
-from datasets.utils import draw_bbx
-from losses.SSDLoss import ssd_loss
+from datasets.utils import draw_bbx, ReduceBoundingBoxes
 from losses.YoloLoss import yolo_loss
 
 
@@ -80,7 +80,7 @@ class SAMSGD(Adam):
         return loss
 
 
-class ModelMetaSSD(LightningModule):
+class SSDModelMeta(LightningModule):
     def __init__(self, model, lr=1e-4, pretrained=False, log_path=Path("out.log"), *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.model = model
@@ -92,6 +92,8 @@ class ModelMetaSSD(LightningModule):
         return self.model(x)
 
     def configure_optimizers(self):
+        # optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, momentum=0.9)
+        # optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         optimizer = SAMSGD(self.parameters(), lr=self.lr)
         self.opt = optimizer
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40], gamma=0.1)
@@ -100,20 +102,18 @@ class ModelMetaSSD(LightningModule):
 
     def step(self, batch, batch_idx, validation=False):
         x, y, gt_bbxs = batch
-
-        # y_hat = self.forward(x)
-        # loss = 0
+        bs = len(gt_bbxs)
+        num_of_features_maps = len(y)
 
         def closure():
-            # self.opt.zero_grad()
             closure_loss = 0
             y_hat = self.forward(x)
-            for i in range(y.shape[0]):
-                predicted_boxes = y_hat[i]
-                ground_truth_boxes = y[i]
-                closure_loss += ssd_loss(predicted_boxes, ground_truth_boxes)
-            closure_loss = closure_loss / len(y)
-            # closure_loss.backward()
+            for i in range(num_of_features_maps):
+                for j in range(bs):
+                    predicted_boxes = y_hat[i][j]
+                    ground_truth_boxes = y[i][j]
+                    closure_loss += yolo_loss(predicted_boxes, ground_truth_boxes)
+            closure_loss = closure_loss / bs
             return closure_loss
 
         if not validation:
@@ -128,7 +128,7 @@ class ModelMetaSSD(LightningModule):
         loss = 0
 
         if batch_idx == 0:
-            # gt_bbx_check = self.model.non_max_suppression(y)
+            gt_bbx_check = self.model.non_max_suppression(y)
             pred_bbx = self.model.non_max_suppression(y_hat)
             test_img = x[0]
             test_gt = gt_bbxs[0]
@@ -156,50 +156,51 @@ class ModelMetaSSD(LightningModule):
         total_iou = 0.0
         total_recall = 0.0
         total_precision = 0.0
-        for i in range(y.shape[0]):
-            predicted_boxes = y_hat[i]
-            ground_truth_boxes = y[i]
-            loss += ssd_loss(predicted_boxes, ground_truth_boxes)
-            # reduce_bounding_boxes = ReduceBoundingBoxes(
-            #     probability_threshold=0.5,
-            #     iou_threshold=0.5,
-            #     input_shape=self.model.input_shape,
-            #     num_of_patches=self.model.num_of_patches
-            # )
-            # gt_bbx2 = reduce_bounding_boxes(ground_truth_boxes)[:, 1:].to(ground_truth_boxes.device)
-            gt_bbx = self.model.reduce_bounding_boxes(ground_truth_boxes)[:, 1:].to(ground_truth_boxes.device)
-            # gt_bbx = gt_bbxs[i][:, 1:]
-            pred_bbx = self.model.reduce_bounding_boxes(predicted_boxes)
+        for i in range(num_of_features_maps):
+            for j in range(bs):
+                predicted_boxes = y_hat[i][j]
+                ground_truth_boxes = y[i][j]
+                loss += yolo_loss(predicted_boxes, ground_truth_boxes)
+                # reduce_bounding_boxes = ReduceBoundingBoxes(
+                #     probability_threshold=0.5,
+                #     iou_threshold=0.5,
+                #     input_shape=self.model.input_shape,
+                #     num_of_patches=self.model.num_of_patches
+                # )
+                # gt_bbx2 = reduce_bounding_boxes(ground_truth_boxes)[:, 1:].to(ground_truth_boxes.device)
+                gt_bbx = self.model.reduce_bounding_boxes[i](ground_truth_boxes)[:, 1:].to(ground_truth_boxes.device)
+                # gt_bbx = gt_bbxs[i][:, 1:]
+                pred_bbx = self.model.reduce_bounding_boxes[i](predicted_boxes)
 
-            # print("gt_bbx", gt_bbx)
-            # print("cgt_bxx", cgt_bxx)
-            # print("pred_bbx", pred_bbx)
-            # draw_bbx(
-            #     img=x[i],
-            #     bbx=gt_bbx,
-            #     input_shape=self.model.input_shape,
-            #     show=True
-            # )
-            if pred_bbx.shape[0] > 0:
-                pred_bbx = pred_bbx[:, 1:]
-                gt_bbx[:, 2] = gt_bbx[:, 2] + gt_bbx[:, 0]
-                gt_bbx[:, 3] = gt_bbx[:, 3] + gt_bbx[:, 1]
+                # print("gt_bbx", gt_bbx)
+                # print("cgt_bxx", cgt_bxx)
+                # print("pred_bbx", pred_bbx)
+                # draw_bbx(
+                #     img=x[i],
+                #     bbx=gt_bbx,
+                #     input_shape=self.model.input_shape,
+                #     show=True
+                # )
+                if pred_bbx.shape[0] > 0:
+                    pred_bbx = pred_bbx[:, 1:]
+                    gt_bbx[:, 2] = gt_bbx[:, 2] + gt_bbx[:, 0]
+                    gt_bbx[:, 3] = gt_bbx[:, 3] + gt_bbx[:, 1]
 
-                pred_bbx[:, 2] = pred_bbx[:, 2] + pred_bbx[:, 0]
-                pred_bbx[:, 3] = pred_bbx[:, 3] + pred_bbx[:, 1]
-                iou = torch.nan_to_num(box_iou(gt_bbx, pred_bbx), 0)
-                if gt_bbx.shape[0] == 0:
-                    recall = 1.0 if pred_bbx.shape[0] == 0 else 0.0
-                else:
-                    recall = torch.where(iou > 0.5)[0].shape[0] / gt_bbx.shape[0]
-                total_recall += recall
-                precision = torch.where(iou > 0.5)[0].shape[0] / pred_bbx.shape[0]
-                total_precision += precision
-                total_iou += torch.sum(iou)
+                    pred_bbx[:, 2] = pred_bbx[:, 2] + pred_bbx[:, 0]
+                    pred_bbx[:, 3] = pred_bbx[:, 3] + pred_bbx[:, 1]
+                    iou = torch.nan_to_num(box_iou(gt_bbx, pred_bbx), 0)
+                    if gt_bbx.shape[0] == 0:
+                        recall = 1.0 if pred_bbx.shape[0] == 0 else 0.0
+                    else:
+                        recall = torch.where(iou > 0.5)[0].shape[0] / gt_bbx.shape[0]
+                    total_recall += recall
+                    precision = torch.where(iou > 0.5)[0].shape[0] / pred_bbx.shape[0]
+                    total_precision += precision
+                    total_iou += torch.sum(iou)
         # loss = loss / len(y)
-        total_recall = total_recall / len(y)
-        total_precision = total_precision / len(y)
-        total_iou = total_iou / len(y)
+        total_recall = total_recall / bs
+        total_precision = total_precision / bs
+        total_iou = total_iou / bs
 
         step_outputs = {
             "loss": loss,
@@ -237,7 +238,6 @@ class ModelMetaSSD(LightningModule):
         epoch_metrics["f1_score"] = f1_score
         self.log("loss", loss, prog_bar=True, logger=True, on_epoch=True)
         self.log(f"{step_str} loss", loss, prog_bar=True, logger=True, on_epoch=True)
-        self.log(f"{step_str} iou", epoch_metrics['total_iou'], prog_bar=True, logger=True, on_epoch=True)
         self.log(f"{step_str} recall", epoch_metrics['total_recall'], prog_bar=True, logger=True, on_epoch=True)
         self.log(f"{step_str} precision", epoch_metrics['total_precision'], prog_bar=True, logger=True, on_epoch=True)
         self.log(f"{step_str} f1_score", epoch_metrics['f1_score'], prog_bar=True, logger=True, on_epoch=True)
@@ -251,11 +251,11 @@ class ModelMetaSSD(LightningModule):
             out = self.log_path
             with out.open("a") as fp:
                 fp.write(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']} ")
-                fp.write(f"training, loss: {epoch_metrics['loss']:5.3f}, iou: {epoch_metrics['total_iou']:5.3f},"
+                fp.write(f"training, loss: {epoch_metrics['loss']:5.3f},"
                          f"recall {epoch_metrics['total_recall']:5.3f}, precision {epoch_metrics['total_precision']:5.3f}"
                          f", f1_score {epoch_metrics['f1_score']:5.3f} ")
                 fp.write(
-                    f"validation, loss: {self.epoch_metrics['loss']:5.3f}, iou: {self.epoch_metrics['total_iou']:5.3f},"
+                    f"validation, loss: {self.epoch_metrics['loss']:5.3f},"
                     f" recall {self.epoch_metrics['total_recall']:5.3f}, precision {self.epoch_metrics['total_precision']:5.3f}"
                     f", f1_score {self.epoch_metrics['f1_score']:5.3f} ")
         return epoch_metrics
@@ -268,3 +268,4 @@ class ModelMetaSSD(LightningModule):
 
     def test_epoch_end(self, validation_epoch_outputs):
         self.format_metrics(validation_epoch_outputs, training=False)
+

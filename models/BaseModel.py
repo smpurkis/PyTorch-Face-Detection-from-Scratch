@@ -2,6 +2,7 @@ import albumentations as A
 import torch
 import torch.nn as nn
 from albumentations.pytorch.transforms import ToTensorV2
+from ptflops import get_model_complexity_info
 from torchinfo import summary
 from torchvision.transforms import transforms
 
@@ -12,8 +13,6 @@ class BaseModel(nn.Module):
         super().__init__()
         self.input_shape = input_shape
         self.num_of_patches = num_of_patches
-        assert input_shape[1] % num_of_patches == 0 and input_shape[2] % num_of_patches == 0, \
-            f"Input shape {input_shape} cannot be divided into {num_of_patches} patches"
         self.probability_threshold = probability_threshold
         self.iou_threshold = iou_threshold
         self.reduce_bounding_boxes = ReduceBoundingBoxes(
@@ -23,12 +22,16 @@ class BaseModel(nn.Module):
             num_of_patches=self.num_of_patches
         )
 
-    def summary(self):
+    def summary(self, *args, **kwargs):
         if self.input_shape is None:
             raise Exception("Please set 'input_shape'")
         else:
             self(torch.rand((1, *self.input_shape)).to(torch.device("cuda" if torch.cuda.is_available() else "cpu")))
-            print(summary(self, (1, *self.input_shape)))
+            print(summary(self, (1, *self.input_shape), *args, **kwargs))
+        macs, params = get_model_complexity_info(self, self.input_shape, as_strings=True,
+                                                 print_per_layer_stat=True, verbose=True)
+        print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
+        print('{:<30}  {:<8}'.format('Number of parameters: ', params))
 
     def non_max_suppression(self, x):
         if len(x.shape) == 4:
