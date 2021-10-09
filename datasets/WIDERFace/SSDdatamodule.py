@@ -89,7 +89,7 @@ class SSDWIDERFaceDataModule(pl.LightningDataModule):
             target["bbx"] = torch.tensor(target["bbx"])
         # targets = [t for t in targets if t["bbx"].size(0) > 20]
         # targets = [targets[0]]
-        targets = [t for t in targets if t["bbx"].size(0) < 3]
+        targets = [t for t in targets if t["bbx"].size(0) < 10]
         return targets
 
     def training_transform(self):
@@ -105,14 +105,14 @@ class SSDWIDERFaceDataModule(pl.LightningDataModule):
             A.augmentations.transforms.GlassBlur(sigma=0.1, max_delta=1, iterations=1, p=0.2),
             A.augmentations.transforms.MotionBlur(p=0.2),
             ToTensorV2(),
-        ], bbox_params=A.BboxParams(format='coco', min_area=10))
+        ], bbox_params=A.BboxParams(format='coco', min_area=50))
         return training_transform
 
     def default_transform(self):
         default_transform = A.Compose([
             A.Resize(width=self.input_shape[1], height=self.input_shape[0]),
             ToTensorV2(),
-        ], bbox_params=A.BboxParams(format='coco', min_area=10))
+        ], bbox_params=A.BboxParams(format='coco', min_area=50))
         return default_transform
 
     def setup(self, stage=None):
@@ -180,7 +180,7 @@ if __name__ == '__main__':
     input_shape = (320, 320)
     dm = SSDWIDERFaceDataModule(
         "/home/sam/PycharmProjects/python/PyTorch-Face-Detection-from-Scratch",
-        num_of_patches=(10,),
+        num_of_patches=(15,),
         input_shape=input_shape
     )
     dm.setup()

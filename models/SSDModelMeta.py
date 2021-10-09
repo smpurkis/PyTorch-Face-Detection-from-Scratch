@@ -112,7 +112,7 @@ class SSDModelMeta(LightningModule):
                 for j in range(bs):
                     predicted_boxes = y_hat[i][j]
                     ground_truth_boxes = y[i][j]
-                    closure_loss += yolo_loss(predicted_boxes, ground_truth_boxes)
+                    closure_loss += yolo_loss(predicted_boxes, ground_truth_boxes, self.current_epoch)
             closure_loss = closure_loss / bs
             return closure_loss
 
@@ -130,6 +130,10 @@ class SSDModelMeta(LightningModule):
         if batch_idx == 0:
             gt_bbx_check = self.model.non_max_suppression(y)
             pred_bbx = self.model.non_max_suppression(y_hat)
+            print("\n")
+            for i in range(num_of_features_maps):
+                scores = y_hat[i][:, 0, :, :]
+                print(f"patch_size: {scores.shape[2]}", scores.min(), scores.mean(), scores.max())
             test_img = x[0]
             test_gt = gt_bbxs[0]
             test_pred = pred_bbx[0]
@@ -156,51 +160,63 @@ class SSDModelMeta(LightningModule):
         total_iou = 0.0
         total_recall = 0.0
         total_precision = 0.0
+
         for i in range(num_of_features_maps):
             for j in range(bs):
                 predicted_boxes = y_hat[i][j]
                 ground_truth_boxes = y[i][j]
-                loss += yolo_loss(predicted_boxes, ground_truth_boxes)
-                # reduce_bounding_boxes = ReduceBoundingBoxes(
-                #     probability_threshold=0.5,
-                #     iou_threshold=0.5,
-                #     input_shape=self.model.input_shape,
-                #     num_of_patches=self.model.num_of_patches
-                # )
-                # gt_bbx2 = reduce_bounding_boxes(ground_truth_boxes)[:, 1:].to(ground_truth_boxes.device)
-                gt_bbx = self.model.reduce_bounding_boxes[i](ground_truth_boxes)[:, 1:].to(ground_truth_boxes.device)
-                # gt_bbx = gt_bbxs[i][:, 1:]
-                pred_bbx = self.model.reduce_bounding_boxes[i](predicted_boxes)
+                loss += yolo_loss(predicted_boxes, ground_truth_boxes, self.current_epoch)
 
-                # print("gt_bbx", gt_bbx)
-                # print("cgt_bxx", cgt_bxx)
-                # print("pred_bbx", pred_bbx)
-                # draw_bbx(
-                #     img=x[i],
-                #     bbx=gt_bbx,
-                #     input_shape=self.model.input_shape,
-                #     show=True
-                # )
-                if pred_bbx.shape[0] > 0:
-                    pred_bbx = pred_bbx[:, 1:]
-                    gt_bbx[:, 2] = gt_bbx[:, 2] + gt_bbx[:, 0]
-                    gt_bbx[:, 3] = gt_bbx[:, 3] + gt_bbx[:, 1]
+        with torch.no_grad():
+            gt_fm_batch_split = []
+            for k in range(bs):
+                z = []
+                for l in range(len(y)):
+                    z.append(y[l][k])
+                gt_fm_batch_split.append(z)
 
-                    pred_bbx[:, 2] = pred_bbx[:, 2] + pred_bbx[:, 0]
-                    pred_bbx[:, 3] = pred_bbx[:, 3] + pred_bbx[:, 1]
-                    iou = torch.nan_to_num(box_iou(gt_bbx, pred_bbx), 0)
-                    if gt_bbx.shape[0] == 0:
-                        recall = 1.0 if pred_bbx.shape[0] == 0 else 0.0
-                    else:
-                        recall = torch.where(iou > 0.5)[0].shape[0] / gt_bbx.shape[0]
-                    total_recall += recall
-                    precision = torch.where(iou > 0.5)[0].shape[0] / pred_bbx.shape[0]
-                    total_precision += precision
-                    total_iou += torch.sum(iou)
-        # loss = loss / len(y)
-        total_recall = total_recall / bs
-        total_precision = total_precision / bs
-        total_iou = total_iou / bs
+            pred_fm_batch_split = []
+            for k in range(bs):
+                z = []
+                for l in range(len(y)):
+                    z.append(y_hat[l][k])
+                pred_fm_batch_split.append(z)
+
+            for i in range(num_of_features_maps):
+                for j in range(bs):
+                    if i == 0:
+                        gt_fm = gt_fm_batch_split[j]
+                        pred_fm = pred_fm_batch_split[j]
+                        gt_bbx = self.model.reduce_bounding_boxes(gt_fm, self.model.num_of_patches)[:, 1:].to(gt_fm[0].device)
+                        # gt_bbx = gt_bbxs[i][:, 1:]
+                        pred_bbx = self.model.reduce_bounding_boxes(pred_fm, self.model.num_of_patches)
+
+                        # draw_bbx(
+                        #     img=x[i],
+                        #     bbx=gt_bbx,
+                        #     input_shape=self.model.input_shape,
+                        #     show=True
+                        # )
+                        if pred_bbx.shape[0] > 0:
+                            pred_bbx = pred_bbx[:, 1:]
+                            gt_bbx[:, 2] = gt_bbx[:, 2] + gt_bbx[:, 0]
+                            gt_bbx[:, 3] = gt_bbx[:, 3] + gt_bbx[:, 1]
+
+                            pred_bbx[:, 2] = pred_bbx[:, 2] + pred_bbx[:, 0]
+                            pred_bbx[:, 3] = pred_bbx[:, 3] + pred_bbx[:, 1]
+                            iou = torch.nan_to_num(box_iou(gt_bbx, pred_bbx), 0)
+                            if gt_bbx.shape[0] == 0:
+                                recall = 1.0 if pred_bbx.shape[0] == 0 else 0.0
+                            else:
+                                recall = torch.where(iou > 0.5)[0].shape[0] / gt_bbx.shape[0]
+                            total_recall += recall
+                            precision = torch.where(iou > 0.5)[0].shape[0] / pred_bbx.shape[0]
+                            total_precision += precision
+                            total_iou += torch.sum(iou)
+            # loss = loss / len(y)
+            total_recall = total_recall / bs
+            total_precision = total_precision / bs
+            total_iou = total_iou / bs
 
         step_outputs = {
             "loss": loss,

@@ -6,7 +6,8 @@ from ptflops import get_model_complexity_info
 from torchinfo import summary
 from torchvision.transforms import transforms
 
-from datasets.utils import ReduceBoundingBoxes
+from datasets.utils import ReduceBoundingBoxes, SSDReduceBoundingBoxes
+
 
 class SSDBaseModel(nn.Module):
     def __init__(self, filters, input_shape, num_of_patches, probability_threshold=0.5, iou_threshold=0.5):
@@ -15,12 +16,11 @@ class SSDBaseModel(nn.Module):
         self.num_of_patches = num_of_patches
         self.probability_threshold = probability_threshold
         self.iou_threshold = iou_threshold
-        self.reduce_bounding_boxes = [ReduceBoundingBoxes(
+        self.reduce_bounding_boxes = SSDReduceBoundingBoxes(
             probability_threshold=probability_threshold,
             iou_threshold=iou_threshold,
             input_shape=self.input_shape,
-            num_of_patches=num_of_patch
-        ) for num_of_patch in self.num_of_patches]
+        )
 
     def summary(self, *args, **kwargs):
         if self.input_shape is None:
@@ -34,18 +34,21 @@ class SSDBaseModel(nn.Module):
         print('{:<30}  {:<8}'.format('Number of parameters: ', params))
 
     def non_max_suppression(self, x):
-        fm_bbxs = []
-        bs = x[0].shape[0]
-        for i, fm in enumerate(x):
-            fm_bbxs.append(tuple([self.reduce_bounding_boxes[i](fm[j]) for j in range(bs)]))
-        bbxs = []
+        fm_batch_split = []
+        bs = x[0].size(0)
         for i in range(bs):
-            bbxs.append(torch.cat([fm_bbx[i] for fm_bbx in fm_bbxs], dim=0))
-        return bbxs
+            z = []
+            for j in range(len(x)):
+                z.append(x[j][i])
+            fm_batch_split.append(z)
+        filtered_bbxs = []
+        for fm_set in fm_batch_split:
+            bbxs = self.reduce_bounding_boxes(fm_set, self.num_of_patches)
+            filtered_bbxs.append(bbxs)
+        return filtered_bbxs
 
     def single_non_max_suppression(self, x):
-        bbxs = torch.cat([reduce_bounding_boxes(x[i]) for i, reduce_bounding_boxes in enumerate(self.reduce_bounding_boxes)], dim=0)
-        return bbxs
+        return self.reduce_bounding_boxes([z[0] for z in x], self.num_of_patches)
 
     @torch.no_grad()
     def predict(self, x, probability_threshold=0.5, iou_threshold=0.5):

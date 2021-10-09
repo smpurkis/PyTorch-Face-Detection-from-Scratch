@@ -11,10 +11,11 @@ if __name__ == "__main__":
     torch.random.manual_seed(0)
 
     input_shape = (480, 480)
-    filters = 64
+    filters = 128
+    num_of_patches = (30, 15, 7)
     lr = 1e-4
 
-    name = f"ssd_{filters}_{input_shape[0]}x{input_shape[1]}_sam_adam"
+    name = f"ssd_{filters}_{num_of_patches}_{input_shape[0]}x{input_shape[1]}_sam_adam2"
     log_path = Path(f"logs/out_{name}.log")
     log_path.unlink(missing_ok=True)
     model_save_path = f"./saved_models/{name}.pth"
@@ -22,7 +23,7 @@ if __name__ == "__main__":
     model = PoolResnetSSD(
         filters=filters,
         input_shape=(3, *input_shape),
-        num_of_patches=(10,)
+        num_of_patches=num_of_patches
     ).cuda()
 
     model.summary(col_names=(
@@ -53,7 +54,7 @@ if __name__ == "__main__":
         batch_size=8,
         input_shape=input_shape,
         shuffle=False,
-        num_of_patches=(10,)
+        num_of_patches=num_of_patches
     )
     trainer.fit(model=model_setup, datamodule=dm)
     model_setup.to_torchscript(model_save_path)

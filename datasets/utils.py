@@ -4,55 +4,40 @@ from PIL import ImageDraw
 from torchvision import transforms
 from torchvision.ops import nms
 
-
-class ReduceSSDBoundingBoxes(nn.Module):
-    def __init__(self, probability_threshold: float = 0.9, iou_threshold: float = 0.5, input_shape=(3, 320, 240),
-                 patch_sizes=(60, 30, 15, 7), priors=None, with_priors=False):
+class SSDReduceBoundingBoxes(nn.Module):
+    def __init__(self, probability_threshold: float = 0.9, iou_threshold: float = 0.5, input_shape=(3, 320, 240)):
         super().__init__()
         self.probability_threshold = probability_threshold
         self.iou_threshold = iou_threshold
         self.input_shape = input_shape
         _, self.width, self.height = input_shape
-        self.patch_sizes = patch_sizes
-        self.multiply_priors = torch.unsqueeze(
-            torch.cat([torch.tensor(1 / ps).repeat(ps * ps) for ps in self.patch_sizes]), dim=1)
-        self.with_priors = with_priors
-        if priors is not None:
-            self.priors = priors
-        else:
-            self.priors = self.calculate_priors()
-
-    def calculate_priors(self):
-        priors_list = []
-        for ps in self.patch_sizes:
-            priors = torch.zeros((4, ps, ps))
-            i, j = torch.where(priors[0] >= 0)
-            priors[0, i, j] = priors[0, i, j] + (1 / ps * i)
-            priors[1, i, j] = priors[1, i, j] + (1 / ps * j)
-            priors[2, i, j] = priors[2, i, j]
-            priors[3, i, j] = priors[3, i, j]
-            priors = priors.permute(1, 2, 0).reshape(ps * ps, 4)
-            priors_list.append(priors)
-        priors = torch.cat(priors_list, dim=0)
-        return priors
 
     def remove_low_probabilty_bbx(self, x):
-        i = torch.where(x[:, 0] > self.probability_threshold)[0]
-        if i.shape[0] == 0:
+        i, j = torch.where(x[0] > self.probability_threshold)
+        if i.shape[0] == 0 and j.shape[0] == 0:
             return torch.empty([0]), torch.tensor(0)
-        bbx = x[i, :]
+        bbx = x[:, i, j].permute(1, 0)
         return bbx, torch.tensor(1)
 
-    def scale_batch_bbx_xywh(self, x):
+    def scale_batch_bbx_xywh(self, x, num_of_patches):
+        x_patch_size = self.width / num_of_patches
+        y_patch_size = self.height / num_of_patches
+        i, j = torch.where(x[0] > self.probability_threshold)
+        x = x.float()
         scaled_x = torch.clone(x).float()
-        if self.with_priors:
-            self.multiply_priors = self.multiply_priors.to(x.device)
-            self.priors = self.priors.to(x.device)
-            scaled_x[:, 1:2] = scaled_x[:, 1:2] * self.multiply_priors
-            scaled_x[:, 2:3] = scaled_x[:, 2:3] * self.multiply_priors
-            scaled_x[:, 1:5] = scaled_x[:, 1:5] + self.priors
-        scaled_x[:, [1, 3]] = scaled_x[:, [1, 3]] * self.width
-        scaled_x[:, [2, 4]] = scaled_x[:, [2, 4]] * self.height
+        scaled_x[1, i, j] = x[1, i, j] * x_patch_size + i * x_patch_size
+        scaled_x[2, i, j] = x[2, i, j] * y_patch_size + j * y_patch_size
+        scaled_x[3, i, j] = x[3, i, j] * self.width
+        scaled_x[4, i, j] = x[4, i, j] * self.height
+        return scaled_x
+
+    def scale_batch_bbx(self, x):
+        i, j = torch.where(x[0] > self.probability_threshold)
+        scaled_x = torch.clone(x).float()
+        scaled_x[1, i, j] = x[1, i, j] * self.x_patch_size + i * self.x_patch_size
+        scaled_x[2, i, j] = x[2, i, j] * self.y_patch_size + j * self.y_patch_size
+        scaled_x[3, i, j] = x[3, i, j] * self.x_patch_size + i * self.x_patch_size
+        scaled_x[4, i, j] = x[4, i, j] * self.y_patch_size + j * self.y_patch_size
         return scaled_x
 
     def convert_batch_to_xywh(self, x):
@@ -65,17 +50,22 @@ class ReduceSSDBoundingBoxes(nn.Module):
         x[:, 4] = x[:, 4] + x[:, 2]
         return x
 
-    def forward(self, x):
-        x = self.scale_batch_bbx_xywh(x)
-        x, boxes_exist = self.remove_low_probabilty_bbx(x)
-        if boxes_exist == 1:
+    def forward(self, outs, num_of_patches):
+        z = []
+        for i in range(len(num_of_patches)):
+            x = self.scale_batch_bbx_xywh(outs[i], num_of_patches[i])
+            x, boxes_exist = self.remove_low_probabilty_bbx(x)
+            if boxes_exist == 1:
+                z.append(x)
+        if len(z) > 0:
+            x = torch.cat(z, dim=0)
             x = self.convert_batch_to_xyxy(x)
             bbx = torch.round(x[:, 1:])
-            # x = torch.clamp(bbx, 0.0, 1.0)
             scores = x[:, 0]
             bbxis = nms(boxes=bbx, scores=scores, iou_threshold=self.iou_threshold)
             x = torch.cat([scores.view(-1, 1), bbx], dim=1)
             out = self.convert_batch_to_xywh(x[bbxis])
+            # out = x[bbxis]
             return out
         else:
             return torch.empty(0).reshape(0, 5)
@@ -108,7 +98,6 @@ class ReduceBoundingBoxes(nn.Module):
         scaled_x[3, i, j] = x[3, i, j] * self.width
         scaled_x[4, i, j] = x[4, i, j] * self.height
         return scaled_x
-
 
     def apply_priors(self, x):
         n, i, j = torch.where(x[:, 0] > self.probability_threshold)

@@ -126,15 +126,15 @@ class SSDWIDERFaceDataset(Dataset):
                 feature_maps.append(fm)
             # draw_bbx(img_og, fm, original_img_size, show=True)
 
-            for num_of_patches in self.num_of_patches:
-                reduce_bounding_boxes = ReduceBoundingBoxes(
-                    0.5, 0.5, (3, *self.input_shape), num_of_patches
-                )
-                s = reduce_bounding_boxes(torch.clone(fm))
+            # for num_of_patches in self.num_of_patches:
+            #     reduce_bounding_boxes = ReduceBoundingBoxes(
+            #         0.5, 0.5, (3, *self.input_shape), num_of_patches
+            #     )
+            #     s = reduce_bounding_boxes(torch.clone(fm))
             # # draw_bbx(img, s, self.input_shape, show=True)
             #
-            b = torch.sort(bbx, dim=0)
-            bb = torch.sort(s, dim=0)
+            # b = torch.sort(bbx, dim=0)
+            # bb = torch.sort(s, dim=0)
             #
             # try:
             #     torch.all(b.values == bb.values)
