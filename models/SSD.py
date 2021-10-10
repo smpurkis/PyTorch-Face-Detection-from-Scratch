@@ -2,6 +2,7 @@ import os
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision.transforms import transforms
 
 from datasets.utils import ReduceSSDBoundingBoxes
@@ -81,8 +82,8 @@ class SeparableResidualBlock(nn.Module):
 class SSD(BaseSSDModel):
     def __init__(self, filters, input_shape, probability_threshold=0.5, iou_threshold=0.5, priors=None):
         super().__init__(filters, input_shape, probability_threshold=probability_threshold, iou_threshold=iou_threshold)
-        # self.patch_sizes = (60, 30, 15, 7)
-        self.patch_sizes = (2,)
+        self.patch_sizes = (60, 30, 15, 7)
+        # self.patch_sizes = (2,)
         _, self.height, self.width = input_shape
 
         # regular functions
@@ -114,15 +115,15 @@ class SSD(BaseSSDModel):
             bias=True
         )
         self.feature_extractor = nn.Sequential(
-            SeparableResidualBlock(in_filters=filters, out_filters=2 * filters, use_max_pool=False),
+            SeparableResidualBlock(in_filters=filters, out_filters=2 * filters, use_max_pool=True),
             SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=True),
             SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=False),
             SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=False),
             SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=False),
             SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=False),
-            SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=True),
-            SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=True),
-            SeparableResidualBlock(in_filters=2 * filters, out_filters=4 * filters, use_max_pool=True)
+            SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=False),
+            SeparableResidualBlock(in_filters=2 * filters, out_filters=2 * filters, use_max_pool=False),
+            SeparableResidualBlock(in_filters=2 * filters, out_filters=4 * filters, use_max_pool=False)
         )
         continue_layers = []
         extracting_layers = []
@@ -197,13 +198,12 @@ class SSD(BaseSSDModel):
                 p = 0
             z = self.extracting_layers[i](x.permute(0, 2, 3, 1).contiguous())
             z = z.reshape(bs, -1, 5)
-            z = z[:, :4, :]
+            # z = z[:, :4, :]
             scores.append(z[..., :1])
             bbxs.append(z[..., 1:5])
         scores = self.sigmoid(torch.cat(scores, dim=1))
         # bbxs = self.sigmoid(torch.cat(bbxs, dim=1))
         bbxs = torch.cat(bbxs, dim=1)
-        bbxs = torch.clamp(bbxs, 0.001, 0.999)
         x = torch.cat([scores, bbxs], dim=2)
         x = self.apply_priors(x)
         # print("\n", scores.min(), scores.mean(), scores.max())
@@ -218,7 +218,7 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = ""
     input_shape = (480, 480)
     bm = SSD(
-        filters=32,
+        filters=16,
         input_shape=(3, *input_shape),
     ).cpu()
     bm.eval()

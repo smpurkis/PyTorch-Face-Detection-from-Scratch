@@ -1,7 +1,77 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+
+class CustomBCELoss(torch.nn.Module):
+
+    def __init__(self, pos_weight=1):
+      super().__init__()
+      self.pos_weight = pos_weight
+
+    def forward(self, input, target):
+      epsilon = 10 ** -7
+      input = input.clamp(epsilon, 1 - epsilon)
+      my_bce_loss = torch.sum(-1 * (self.pos_weight * target * torch.log(input) + (1 - target) * torch.log(1 - input)))
+      return my_bce_loss
 
 
-def ssd_loss(pred_fm, gt_fm):
+def hard_negative_mining(loss, labels, neg_pos_ratio):
+    """
+    It used to suppress the presence of a large number of negative prediction.
+    It works on image level not batch level.
+    For any example/image, it keeps all the positive predictions and
+     cut the number of negative predictions to make sure the ratio
+     between the negative examples and positive examples is no more
+     the given ratio for an image.
+
+    Args:
+        loss (N, num_priors): the loss for each example.
+        labels (N, num_priors): the labels.
+        neg_pos_ratio:  the ratio between the negative examples and positive examples.
+    """
+    pos_mask = labels > 0  # positive label mask for each image
+    num_pos = pos_mask.long().sum(dim=1, keepdim=True)  # calculates the number of positive images for each image
+    num_neg = num_pos * neg_pos_ratio  # calculates the number of negative images for each image
+
+    loss[pos_mask] = -math.inf  # sets all the positive confidences to negative infinity
+    _, indexes = loss.sort(dim=1, descending=True)  # order the losses and extract the indices in descending order per image
+    _, orders = indexes.sort(dim=1)
+    neg_mask = orders < num_neg
+    return pos_mask | neg_mask
+
+def ssd_loss(confidence, predicted_locations, labels, gt_locations, neg_pos_ratio):
+    """Compute classification loss and smooth l1 loss.
+
+    Args:
+        confidence (batch_size, num_priors, num_classes): class predictions.
+        locations (batch_size, num_priors, 4): predicted locations.
+        labels (batch_size, num_priors): real labels of all the priors.
+        boxes (batch_size, num_priors, 4): real boxes corresponding all the priors.
+    """
+    with torch.no_grad():
+        # derived from cross_entropy=sum(log(p))
+        # loss = -F.log_softmax(confidence, dim=1)[:, :, 0]
+        # loss2 = torch.abs(labels - confidence)
+        loss = -torch.log(confidence)
+        mask = hard_negative_mining(loss, labels, neg_pos_ratio)
+
+    confidence = confidence[mask]
+    labels_masked = torch.round(labels[mask])
+
+    # for some reason the builtin torch.nn.BCELoss errs with exception some autocast function
+    loss_fn = CustomBCELoss()
+    classification_loss = loss_fn(confidence, labels_masked)
+    pos_mask = labels > 0
+    predicted_locations = predicted_locations[pos_mask, :].reshape(-1, 4)
+    gt_locations = gt_locations[pos_mask, :].reshape(-1, 4)
+    smooth_l1_loss = F.smooth_l1_loss(predicted_locations, gt_locations, reduction='sum')  # smooth_l1_loss
+    # smooth_l1_loss = F.mse_loss(predicted_locations, gt_locations, reduction='sum')  #l2 loss
+    num_pos = gt_locations.size(0)
+    return (smooth_l1_loss + classification_loss) / num_pos
+
+
+def ssd_loss2(pred_fm, gt_fm):
     num_of_predictions = pred_fm.shape[0]
     pred_fm = pred_fm.permute(1, 0)
     gt_fm = gt_fm.permute(1, 0)

@@ -6,7 +6,7 @@ from torch.optim._multi_tensor import Adam
 from torchvision.ops import box_iou
 
 from datasets.utils import draw_bbx
-from losses.SSDLoss import ssd_loss
+from losses.SSDLoss import ssd_loss, ssd_loss2
 from losses.YoloLoss import yolo_loss
 
 
@@ -108,11 +108,12 @@ class ModelMetaSSD(LightningModule):
             # self.opt.zero_grad()
             closure_loss = 0
             y_hat = self.forward(x)
-            for i in range(y.shape[0]):
-                predicted_boxes = y_hat[i]
-                ground_truth_boxes = y[i]
-                closure_loss += ssd_loss(predicted_boxes, ground_truth_boxes)
-            closure_loss = closure_loss / len(y)
+            # for i in range(y.shape[0]):
+            #     predicted_boxes = y_hat[i]
+            #     ground_truth_boxes = y[i]
+            #     closure_loss += ssd_loss(predicted_boxes, ground_truth_boxes)
+            closure_loss += ssd_loss(y_hat[:, :, 0], y_hat[:, :, 1:], y[:, :, 0], y[:, :, 1:], 10)
+            # closure_loss = closure_loss / len(y)
             # closure_loss.backward()
             return closure_loss
 
@@ -156,10 +157,12 @@ class ModelMetaSSD(LightningModule):
         total_iou = 0.0
         total_recall = 0.0
         total_precision = 0.0
+        loss = ssd_loss(y_hat[:, :, 0], y_hat[:, :, 1:], y[:, :, 0], y[:, :, 1:], 10)
         for i in range(y.shape[0]):
             predicted_boxes = y_hat[i]
             ground_truth_boxes = y[i]
-            loss += ssd_loss(predicted_boxes, ground_truth_boxes)
+            # loss += ssd_loss2(predicted_boxes, ground_truth_boxes)
+
             # reduce_bounding_boxes = ReduceBoundingBoxes(
             #     probability_threshold=0.5,
             #     iou_threshold=0.5,

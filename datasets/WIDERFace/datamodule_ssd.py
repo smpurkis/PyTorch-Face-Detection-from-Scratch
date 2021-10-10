@@ -89,7 +89,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             target["bbx"] = torch.tensor(target["bbx"])
         # targets = [t for t in targets if t["bbx"].size(0) > 50]
         # targets = [targets[0]]
-        targets = [t for t in targets if t["bbx"].size(0) == 1]
+        targets = [t for t in targets if t["bbx"].size(0) < 120]
         return targets
 
     def training_transform(self):
@@ -152,7 +152,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=self.shuffle,
             collate_fn=self.my_collate,
-            # num_workers=cpu_count()//2
+            num_workers=cpu_count()//4
         )
 
     def val_dataloader(self):
@@ -160,7 +160,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             self.val_dataset,
             batch_size=self.batch_size,
             collate_fn=self.my_collate,
-            # num_workers=cpu_count()//2
+            num_workers=cpu_count()//4
         )
 
     def test_dataloader(self):
@@ -168,7 +168,7 @@ class WIDERFaceDataModuleSSD(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             collate_fn=self.my_collate,
-            # num_workers=cpu_count()//2
+            num_workers=cpu_count()//4
         )
 
     def teardown(self, stage=None):

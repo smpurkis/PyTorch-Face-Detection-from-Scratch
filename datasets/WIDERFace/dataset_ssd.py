@@ -26,12 +26,12 @@ class WIDERFaceDatasetSSD(Dataset):
         self.targets = targets
         self.num_of_patches = num_of_patches
         self.input_shape = input_shape
-        # self.patch_sizes = (60, 30, 15, 7)
-        self.patch_sizes = (2,)
+        self.patch_sizes = (60, 30, 15, 7)
+        # self.patch_sizes = (2,)
 
     def __len__(self):
         # return 1
-        return len(self.targets)//8
+        return len(self.targets)//4
 
     def convert_bbx_to_feature_map(self, bbx, img_size, patch_size):
         feature_map = fm = torch.zeros((5, patch_size, patch_size))
@@ -146,8 +146,8 @@ class WIDERFaceDatasetSSD(Dataset):
             # # draw_bbx(img, s, self.input_shape, show=True)
             #
             b = torch.sort(bbx, dim=0)
-            bb = torch.sort(s, dim=0)
-            #
+            bb = torch.sort(torch.round(s).to(torch.int), dim=0)
+            assert torch.all(b.values == bb.values)
             # try:
             #     torch.all(b.values == bb.values)
             # except Exception as e:
