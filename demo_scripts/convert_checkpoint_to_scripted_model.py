@@ -61,4 +61,6 @@ def define_model(model_path: str):
 
 
 if __name__ == "__main__":
-    model = define_model_from_checkpoint("lightning_logs/custom_poolresnet_128_10x10_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt")
+    model = define_model_from_checkpoint(
+        "lightning_logs/custom_poolresnet_128_10x10_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt"
+    )
