@@ -28,3 +28,26 @@ I found that:
 - The Pool Resnet backbone performs equally well, but is much faster.
 - The Mobilenet v3 backbone performs the same as the Pool Resnet, leading me to believe that none of the pretraining is
 helping.
+
+
+### Run the model
+To run the medium PoolResnet Model:
+1. Install the requirements
+```bash
+pip install -r requirements.txt
+```
+2. Run the model
+```bash
+python demo_scripts/demo_model_torch.py
+```
+
+### Train a model
+To run the medium PoolResnet Model:
+1. Install the requirements
+```bash
+pip install -r requirements.txt
+```
+2. Run the model
+```bash
+python demo_scripts/demo_model_torch.py
+```
