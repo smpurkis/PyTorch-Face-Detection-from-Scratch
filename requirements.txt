@@ -56,10 +56,10 @@ tensorboard-plugin-wit==1.8.1
 threadpoolctl==3.1.0
 tifffile==2022.5.4
 timm==0.5.4
-torch==1.10.1
+torch==1.10.1+cu113
 torchinfo==1.7.0
 torchmetrics==0.9.0
-torchvision==0.11.2
+torchvision==0.11.2+cu113
 tqdm==4.64.0
 typing_extensions==4.2.0
 urllib3==1.26.9
