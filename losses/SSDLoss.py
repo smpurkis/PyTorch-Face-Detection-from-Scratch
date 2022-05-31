@@ -3,17 +3,23 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-class CustomBCELoss(torch.nn.Module):
 
+class CustomBCELoss(torch.nn.Module):
     def __init__(self, pos_weight=1):
-      super().__init__()
-      self.pos_weight = pos_weight
+        super().__init__()
+        self.pos_weight = pos_weight
 
     def forward(self, input, target):
-      epsilon = 10 ** -7
-      input = input.clamp(epsilon, 1 - epsilon)
-      my_bce_loss = torch.sum(-1 * (self.pos_weight * target * torch.log(input) + (1 - target) * torch.log(1 - input)))
-      return my_bce_loss
+        epsilon = 10**-7
+        input = input.clamp(epsilon, 1 - epsilon)
+        my_bce_loss = torch.sum(
+            -1
+            * (
+                self.pos_weight * target * torch.log(input)
+                + (1 - target) * torch.log(1 - input)
+            )
+        )
+        return my_bce_loss
 
 
 def hard_negative_mining(loss, labels, neg_pos_ratio):
@@ -31,14 +37,21 @@ def hard_negative_mining(loss, labels, neg_pos_ratio):
         neg_pos_ratio:  the ratio between the negative examples and positive examples.
     """
     pos_mask = labels > 0  # positive label mask for each image
-    num_pos = pos_mask.long().sum(dim=1, keepdim=True)  # calculates the number of positive images for each image
-    num_neg = num_pos * neg_pos_ratio  # calculates the number of negative images for each image
+    num_pos = pos_mask.long().sum(
+        dim=1, keepdim=True
+    )  # calculates the number of positive images for each image
+    num_neg = (
+        num_pos * neg_pos_ratio
+    )  # calculates the number of negative images for each image
 
     loss[pos_mask] = -math.inf  # sets all the positive confidences to negative infinity
-    _, indexes = loss.sort(dim=1, descending=True)  # order the losses and extract the indices in descending order per image
+    _, indexes = loss.sort(
+        dim=1, descending=True
+    )  # order the losses and extract the indices in descending order per image
     _, orders = indexes.sort(dim=1)
     neg_mask = orders < num_neg
     return pos_mask | neg_mask
+
 
 def ssd_loss(confidence, predicted_locations, labels, gt_locations, neg_pos_ratio):
     """Compute classification loss and smooth l1 loss.
@@ -65,7 +78,9 @@ def ssd_loss(confidence, predicted_locations, labels, gt_locations, neg_pos_rati
     pos_mask = labels > 0
     predicted_locations = predicted_locations[pos_mask, :].reshape(-1, 4)
     gt_locations = gt_locations[pos_mask, :].reshape(-1, 4)
-    smooth_l1_loss = F.smooth_l1_loss(predicted_locations, gt_locations, reduction='sum')  # smooth_l1_loss
+    smooth_l1_loss = F.smooth_l1_loss(
+        predicted_locations, gt_locations, reduction="sum"
+    )  # smooth_l1_loss
     # smooth_l1_loss = F.mse_loss(predicted_locations, gt_locations, reduction='sum')  #l2 loss
     num_pos = gt_locations.size(0)
     return (smooth_l1_loss + classification_loss) / num_pos
@@ -97,11 +112,19 @@ def ssd_loss2(pred_fm, gt_fm):
     # no_object_weight = 1 / (2 * num_of_predictions)
     no_object_weight = 1 / num_of_predictions**1
 
-    xy_loss = coord_weight * object_in_cell * ((gt_x - pred_x) ** 2 + (gt_y - pred_y) ** 2)
+    xy_loss = (
+        coord_weight * object_in_cell * ((gt_x - pred_x) ** 2 + (gt_y - pred_y) ** 2)
+    )
     # xy_loss = 0
-    wh_loss = coord_weight * object_in_cell * ((gt_w ** 0.5 - pred_w ** 0.5) ** 2 + (gt_h ** 0.5 - pred_h ** 0.5) ** 2)
+    wh_loss = (
+        coord_weight
+        * object_in_cell
+        * ((gt_w**0.5 - pred_w**0.5) ** 2 + (gt_h**0.5 - pred_h**0.5) ** 2)
+    )
     # wh_loss = 0
-    conf_loss = (object_in_cell + empty_cell * no_object_weight) * (gt_conf - pred_conf) ** 2
+    conf_loss = (object_in_cell + empty_cell * no_object_weight) * (
+        gt_conf - pred_conf
+    ) ** 2
     # conf_loss = 0
 
     loss = torch.sum(xy_loss + wh_loss + conf_loss)

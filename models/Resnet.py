@@ -15,13 +15,13 @@ class ResidualBlock(nn.Module):
             in_channels=filters,
             out_channels=filters,
             kernel_size=(3, 3),
-            padding="same"
+            padding="same",
         )
         self.conv2 = nn.Conv2d(
             in_channels=filters,
             out_channels=filters,
             kernel_size=(3, 3),
-            padding="same"
+            padding="same",
         )
         self.max_pool = nn.MaxPool2d(2)
         self.leaky_relu = nn.LeakyReLU(0.2)
@@ -41,10 +41,24 @@ class ResidualBlock(nn.Module):
 
 
 class Resnet(BaseModel):
-    def __init__(self, filters, input_shape, num_of_patches, num_of_residual_blocks=10, probability_threshold=0.5,
-                 iou_threshold=0.5, pretrained=False, output_kernel_size=3):
-        super().__init__(filters, input_shape, num_of_patches=num_of_patches,
-                         probability_threshold=probability_threshold, iou_threshold=iou_threshold)
+    def __init__(
+        self,
+        filters,
+        input_shape,
+        num_of_patches,
+        num_of_residual_blocks=10,
+        probability_threshold=0.5,
+        iou_threshold=0.5,
+        pretrained=False,
+        output_kernel_size=3,
+    ):
+        super().__init__(
+            filters,
+            input_shape,
+            num_of_patches=num_of_patches,
+            probability_threshold=probability_threshold,
+            iou_threshold=iou_threshold,
+        )
         self.pretrained = pretrained
         self.dropout2d = nn.Dropout2d(0.5)
         self.conv1 = nn.Conv2d(
@@ -55,27 +69,24 @@ class Resnet(BaseModel):
             padding=1,
         )
         self.residual_blocks = nn.Sequential(
-            *[ResidualBlock(
-                filters=filters,
-                num_of_patches=self.num_of_patches
-            ) for _ in range(num_of_residual_blocks)]
+            *[
+                ResidualBlock(filters=filters, num_of_patches=self.num_of_patches)
+                for _ in range(num_of_residual_blocks)
+            ]
         )
         self.out = nn.Conv2d(
             in_channels=filters,
             out_channels=5,
             stride=(1, 1),
             kernel_size=(output_kernel_size, output_kernel_size),
-            padding=1
+            padding=1,
         )
         self.sigmoid = nn.Sigmoid()
         self.resize = transforms.Resize(size=self.input_shape[1:])
 
-    def forward(
-            self, x: torch.Tensor,
-            predict: torch.Tensor = torch.tensor(0)
-    ):
+    def forward(self, x: torch.Tensor, predict: torch.Tensor = torch.tensor(0)):
         if predict == 1:
-            x = self.resize(x) / 255.
+            x = self.resize(x) / 255.0
             if len(x.shape) == 3:
                 x = torch.unsqueeze(x, 0)
         x = self.conv1(x)
@@ -88,14 +99,14 @@ class Resnet(BaseModel):
         return x
 
 
-if __name__ == '__main__':
-    os.environ['CUDA_VISIBLE_DEVICES'] = ""
+if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
     input_shape = (480, 480)
     bm = Resnet(
         filters=64,
         input_shape=(3, *input_shape),
         num_of_patches=15,
-        num_of_residual_blocks=10
+        num_of_residual_blocks=10,
     ).cpu()
     bm.eval()
     bm.summary()

@@ -11,13 +11,13 @@ torch.set_printoptions(sci_mode=False)
 
 class WIDERFaceDataset(Dataset):
     def __init__(
-            self,
-            data_dir,
-            num_of_patches,
-            input_shape,
-            targets=None,
-            split: str = "train",
-            transform=None,
+        self,
+        data_dir,
+        num_of_patches,
+        input_shape,
+        targets=None,
+        split: str = "train",
+        transform=None,
     ):
         self.data_dir = data_dir
         self.transform = transform

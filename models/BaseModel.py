@@ -7,27 +7,41 @@ from torchvision.transforms import transforms
 
 from datasets.utils import ReduceBoundingBoxes
 
+
 class BaseModel(nn.Module):
-    def __init__(self, filters, input_shape, num_of_patches, probability_threshold=0.5, iou_threshold=0.5):
+    def __init__(
+        self,
+        filters,
+        input_shape,
+        num_of_patches,
+        probability_threshold=0.5,
+        iou_threshold=0.5,
+    ):
         super().__init__()
         self.input_shape = input_shape
         self.num_of_patches = num_of_patches
-        assert input_shape[1] % num_of_patches == 0 and input_shape[2] % num_of_patches == 0, \
-            f"Input shape {input_shape} cannot be divided into {num_of_patches} patches"
+        assert (
+            input_shape[1] % num_of_patches == 0
+            and input_shape[2] % num_of_patches == 0
+        ), f"Input shape {input_shape} cannot be divided into {num_of_patches} patches"
         self.probability_threshold = probability_threshold
         self.iou_threshold = iou_threshold
         self.reduce_bounding_boxes = ReduceBoundingBoxes(
             probability_threshold=probability_threshold,
             iou_threshold=iou_threshold,
             input_shape=self.input_shape,
-            num_of_patches=self.num_of_patches
+            num_of_patches=self.num_of_patches,
         )
 
     def summary(self):
         if self.input_shape is None:
             raise Exception("Please set 'input_shape'")
         else:
-            self(torch.rand((1, *self.input_shape)).to(torch.device("cuda" if torch.cuda.is_available() else "cpu")))
+            self(
+                torch.rand((1, *self.input_shape)).to(
+                    torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                )
+            )
             print(summary(self, (1, *self.input_shape)))
 
     def non_max_suppression(self, x):
@@ -45,10 +59,10 @@ class BaseModel(nn.Module):
             probability_threshold=probability_threshold,
             iou_threshold=iou_threshold,
             input_shape=self.input_shape,
-            num_of_patches=self.num_of_patches
+            num_of_patches=self.num_of_patches,
         )
         x = transforms.Resize(size=self.input_shape[1:])(x)
-        x = x / 255.
+        x = x / 255.0
         image = x
         if len(x.shape) == 3:
             x = x.reshape(1, *x.shape)

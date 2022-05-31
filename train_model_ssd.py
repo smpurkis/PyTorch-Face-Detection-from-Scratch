@@ -24,13 +24,15 @@ if __name__ == "__main__":
         input_shape=(3, *input_shape),
     ).cuda()
 
-    model.summary(col_names=(
-        "input_size",
-        "output_size",
-        "num_params",
-        "kernel_size",
-        "mult_adds",
-    ))
+    model.summary(
+        col_names=(
+            "input_size",
+            "output_size",
+            "num_params",
+            "kernel_size",
+            "mult_adds",
+        )
+    )
     model_setup = ModelMetaSSD(
         model=model,
         lr=lr,

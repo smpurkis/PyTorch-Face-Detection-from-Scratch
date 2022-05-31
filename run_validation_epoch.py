@@ -31,7 +31,7 @@ if __name__ == "__main__":
         num_of_patches=num_of_patches,
         num_of_residual_blocks=10,
         probability_threshold=probability_threshold,
-        iou_threshold=iou_threshold
+        iou_threshold=iou_threshold,
     ).cuda()
 
     model.summary()
@@ -45,7 +45,9 @@ if __name__ == "__main__":
     # checkpoint = torch.load("lightning_logs/custom_resnet_64_15x15_480x480_sam_adam/checkpoints/epoch=52-step=42611.ckpt")
     # checkpoint = torch.load("lightning_logs/custom_poolresnet_64_10x10_480x480_sam_adam/checkpoints/epoch=69-step=56279.ckpt")
     # checkpoint = torch.load("lightning_logs/custom_poolresnet_128_10x10_480x480_sam_adam/checkpoints/epoch=69-step=56279.ckpt")
-    checkpoint = torch.load("lightning_logs/pretrained_mobilenetv3backbone_576_15x15_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt")
+    checkpoint = torch.load(
+        "lightning_logs/pretrained_mobilenetv3backbone_576_15x15_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt"
+    )
     model_setup.load_state_dict(checkpoint["state_dict"])
     model_setup.num_of_patches = num_of_patches
 

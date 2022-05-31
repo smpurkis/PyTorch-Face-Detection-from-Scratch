@@ -8,7 +8,9 @@ from pathlib import Path
 
 from datasets.utils import convert_bbx_to_xyxy
 
-onnx_path = Path("../saved_models/custom_poolresnet_128_10x10_480x480_sam_adam.pth.onnx")
+onnx_path = Path(
+    "../saved_models/custom_poolresnet_128_10x10_480x480_sam_adam.pth.onnx"
+)
 assert onnx_path.exists()
 model = onnx.load(onnx_path.as_posix())
 
@@ -36,8 +38,15 @@ def extract_face(frame):
         else:
             width = 3
         bbx = [int(p) for p in convert_bbx_to_xyxy(b)]
-        image = cv2.rectangle(image, pt1=(bbx[0], bbx[1]), pt2=(bbx[2], bbx[3]), thickness=width, color=(0, 0, 200))
+        image = cv2.rectangle(
+            image,
+            pt1=(bbx[0], bbx[1]),
+            pt2=(bbx[2], bbx[3]),
+            thickness=width,
+            color=(0, 0, 200),
+        )
     return image
+
 
 # extract_face(t)
 cap = cv2.VideoCapture(0)
@@ -49,7 +58,7 @@ if not cap.isOpened():
 while True:
     ret, frame = cap.read()
     process_frame = extract_face(frame)
-    cv2.imshow('Input', process_frame)
+    cv2.imshow("Input", process_frame)
 
     c = cv2.waitKey(1)
     if c == 27:

@@ -13,13 +13,13 @@ torch.set_printoptions(sci_mode=False)
 
 class WIDERFaceDatasetSSD(Dataset):
     def __init__(
-            self,
-            data_dir,
-            num_of_patches,
-            input_shape,
-            targets=None,
-            split: str = "train",
-            transform=None,
+        self,
+        data_dir,
+        num_of_patches,
+        input_shape,
+        targets=None,
+        split: str = "train",
+        transform=None,
     ):
         self.data_dir = data_dir
         self.transform = transform
@@ -31,7 +31,7 @@ class WIDERFaceDatasetSSD(Dataset):
 
     def __len__(self):
         # return 1
-        return len(self.targets)//4
+        return len(self.targets) // 4
 
     def convert_bbx_to_feature_map(self, bbx, img_size, patch_size):
         feature_map = fm = torch.zeros((5, patch_size, patch_size))

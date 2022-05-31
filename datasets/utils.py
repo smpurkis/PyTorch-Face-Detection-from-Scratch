@@ -6,8 +6,15 @@ from torchvision.ops import nms
 
 
 class ReduceSSDBoundingBoxes(nn.Module):
-    def __init__(self, probability_threshold: float = 0.9, iou_threshold: float = 0.5, input_shape=(3, 320, 240),
-                 patch_sizes=(60, 30, 15, 7), priors=None, with_priors=False):
+    def __init__(
+        self,
+        probability_threshold: float = 0.9,
+        iou_threshold: float = 0.5,
+        input_shape=(3, 320, 240),
+        patch_sizes=(60, 30, 15, 7),
+        priors=None,
+        with_priors=False,
+    ):
         super().__init__()
         self.probability_threshold = probability_threshold
         self.iou_threshold = iou_threshold
@@ -15,7 +22,11 @@ class ReduceSSDBoundingBoxes(nn.Module):
         _, self.width, self.height = input_shape
         self.patch_sizes = patch_sizes
         self.multiply_priors = torch.unsqueeze(
-            torch.cat([torch.tensor(1 / ps).repeat(ps * ps) for ps in self.patch_sizes]), dim=1)
+            torch.cat(
+                [torch.tensor(1 / ps).repeat(ps * ps) for ps in self.patch_sizes]
+            ),
+            dim=1,
+        )
         self.with_priors = with_priors
         if priors is not None:
             self.priors = priors
@@ -82,8 +93,13 @@ class ReduceSSDBoundingBoxes(nn.Module):
 
 
 class ReduceBoundingBoxes(nn.Module):
-    def __init__(self, probability_threshold: float = 0.9, iou_threshold: float = 0.5, input_shape=(3, 320, 240),
-                 num_of_patches=40):
+    def __init__(
+        self,
+        probability_threshold: float = 0.9,
+        iou_threshold: float = 0.5,
+        input_shape=(3, 320, 240),
+        num_of_patches=40,
+    ):
         super().__init__()
         self.probability_threshold = probability_threshold
         self.iou_threshold = iou_threshold
@@ -164,7 +180,9 @@ def draw_bbx(img, bbx, input_shape=(320, 240), save_name="image", show=False):
     if isinstance(bbxs, torch.Tensor):
         if len(bbxs.shape) == 3:
             num_of_patches = bbxs.shape[1]
-            reduce_bounding_boxes = ReduceBoundingBoxes(0.5, 0.5, (3, *input_shape), num_of_patches)
+            reduce_bounding_boxes = ReduceBoundingBoxes(
+                0.5, 0.5, (3, *input_shape), num_of_patches
+            )
             bbxs = reduce_bounding_boxes(bbxs)
         # elif len(bbxs.shape) == 2:
         #     reduce_bounding_boxes = ReduceSSDBoundingBoxes(0.5, 0.5, input_shape)

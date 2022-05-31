@@ -10,7 +10,7 @@ from models.MobilenetV3Backbone import MobilenetV3Backbone
 from models.PoolResnet import PoolResnet
 from models.Resnet import Resnet
 
-os.environ['CUDA_VISIBLE_DEVICES'] = ""
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 num_of_patches = 10
 input_shape = (480, 480)
@@ -19,15 +19,14 @@ model = PoolResnet(
     filters=128,
     input_shape=(3, *input_shape),
     num_of_patches=num_of_patches,
-    num_of_residual_blocks=10
+    num_of_residual_blocks=10,
 )
-model_setup = ModelMeta(
-    model=model,
-    lr=1e-4
-)
+model_setup = ModelMeta(model=model, lr=1e-4)
 
-checkpoint = torch.load("lightning_logs/custom_poolresnet_128_10x10_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt",
-                        map_location=torch.device("cpu"))
+checkpoint = torch.load(
+    "lightning_logs/custom_poolresnet_128_10x10_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt",
+    map_location=torch.device("cpu"),
+)
 # checkpoint = torch.load("lightning_logs/custom_poolresnet_64_10x10_480x480_sam_adam/checkpoints/epoch=69-step=56279.ckpt",
 #                         map_location=torch.device("cpu"))
 # checkpoint = torch.load("lightning_logs/custom_resnet_64_15x15_480x480_sam_adam/checkpoints/epoch=52-step=42611.ckpt",
@@ -38,11 +37,11 @@ model_setup.load_state_dict(checkpoint["state_dict"])
 
 model.num_of_patches = num_of_patches
 model.reduce_bounding_boxes = ReduceBoundingBoxes(
-            probability_threshold=0.5,
-            iou_threshold=0.01,
-            input_shape=model.input_shape,
-            num_of_patches=model.num_of_patches
-        )
+    probability_threshold=0.5,
+    iou_threshold=0.01,
+    input_shape=model.input_shape,
+    num_of_patches=model.num_of_patches,
+)
 model = model.eval()
 model.summary()
 # model = torch.jit.trace(model, (torch.rand(1, 3, 480, 480), torch.tensor(1)))
@@ -60,6 +59,7 @@ model = torch.jit.script(model)
 #     dynamic_axes={"output": {0: "#boxes"}}
 # )
 
+
 @torch.no_grad()
 def extract_face(frame):
     image = cv2.resize(frame, (480, 480))
@@ -74,8 +74,15 @@ def extract_face(frame):
         else:
             width = 3
         bbx = [int(p.numpy()) for p in convert_bbx_to_xyxy(b)]
-        image = cv2.rectangle(image, pt1=(bbx[0], bbx[1]), pt2=(bbx[2], bbx[3]), thickness=width, color=(0, 0, 200))
+        image = cv2.rectangle(
+            image,
+            pt1=(bbx[0], bbx[1]),
+            pt2=(bbx[2], bbx[3]),
+            thickness=width,
+            color=(0, 0, 200),
+        )
     return image
+
 
 for img_path in Path("imgs", "test_imgs").glob("*"):
     save_img_path = Path(*img_path.parts[:1], "annotated_imgs", img_path.name)
@@ -86,4 +93,3 @@ for img_path in Path("imgs", "test_imgs").glob("*"):
 # cv2.imshow('Input', processed_frame)
 # cv2.waitKey(0)
 # cv2.destroyAllWindows()
-

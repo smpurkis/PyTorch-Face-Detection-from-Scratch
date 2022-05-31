@@ -21,22 +21,21 @@ model = PoolResnet(
     filters=128,
     input_shape=(3, *input_shape),
     num_of_patches=num_of_patches,
-    num_of_residual_blocks=10
+    num_of_residual_blocks=10,
 )
-model_setup = ModelMeta(
-    model=model,
-    lr=1e-4
+model_setup = ModelMeta(model=model, lr=1e-4)
+checkpoint = torch.load(
+    "lightning_logs/custom_128_10x10_sam_adam/checkpoints/epoch=69-step=56279.ckpt",
+    map_location=torch.device("cpu"),
 )
-checkpoint = torch.load("lightning_logs/custom_128_10x10_sam_adam/checkpoints/epoch=69-step=56279.ckpt",
-                        map_location=torch.device("cpu"))
 model_setup.load_state_dict(checkpoint["state_dict"])
 model.num_of_patches = num_of_patches
 model.reduce_bounding_boxes = ReduceBoundingBoxes(
-            probability_threshold=0.65,
-            iou_threshold=0.1,
-            input_shape=model.input_shape,
-            num_of_patches=model.num_of_patches
-        )
+    probability_threshold=0.65,
+    iou_threshold=0.1,
+    input_shape=model.input_shape,
+    num_of_patches=model.num_of_patches,
+)
 model = model.eval()
 
 # 1. setup strategy (L1 Norm)

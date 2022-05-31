@@ -10,7 +10,7 @@ from losses.YoloLoss import yolo_loss
 
 
 class SAMSGD(Adam):
-    """ SGD wrapped with Sharp-Aware Minimization
+    """SGD wrapped with Sharp-Aware Minimization
     Args:
         params: tensors to be optimized
         lr: learning rate
@@ -21,13 +21,14 @@ class SAMSGD(Adam):
         rho: neighborhood size
     """
 
-    def __init__(self,
-                 params,
-                 lr: float,
-                 rho: float = 0.05,
-                 *args,
-                 **kwargs,
-                 ):
+    def __init__(
+        self,
+        params,
+        lr: float,
+        rho: float = 0.05,
+        *args,
+        **kwargs,
+    ):
         if rho <= 0:
             raise ValueError(f"Invalid neighborhood size: {rho}")
         super().__init__(params, lr, *args, **kwargs)
@@ -53,10 +54,10 @@ class SAMSGD(Adam):
             grads = []
             params_with_grads = []
 
-            rho = group['rho']
+            rho = group["rho"]
             # update internal_optim's learning rate
 
-            for p in group['params']:
+            for p in group["params"]:
                 if p.grad is not None:
                     # without clone().detach(), p.grad will be zeroed by closure()
                     grads.append(p.grad.clone().detach())
@@ -64,7 +65,9 @@ class SAMSGD(Adam):
             device = grads[0].device
 
             # compute \hat{\epsilon}=\rho/\norm{g}\|g\|
-            grad_norm = torch.stack([g.detach().norm(2).to(device) for g in grads]).norm(2)
+            grad_norm = torch.stack(
+                [g.detach().norm(2).to(device) for g in grads]
+            ).norm(2)
             epsilon = grads  # alias for readability
             torch._foreach_mul_(epsilon, rho / grad_norm)
 
@@ -80,7 +83,15 @@ class SAMSGD(Adam):
 
 
 class ModelMeta(LightningModule):
-    def __init__(self, model, lr=1e-4, pretrained=False, log_path=Path("out.log"), *args, **kwargs):
+    def __init__(
+        self,
+        model,
+        lr=1e-4,
+        pretrained=False,
+        log_path=Path("out.log"),
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.model = model
         self.lr = lr
@@ -95,7 +106,9 @@ class ModelMeta(LightningModule):
         # optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         optimizer = SAMSGD(self.parameters(), lr=self.lr)
         self.opt = optimizer
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40], gamma=0.1)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            optimizer, milestones=[40], gamma=0.1
+        )
         return [optimizer], [scheduler]
         # return optimizer
 
@@ -140,7 +153,7 @@ class ModelMeta(LightningModule):
                 img=test_img,
                 bbx=test_pred,
                 input_shape=self.model.input_shape,
-                save_name=f"{'validation' if validation else 'train'}_epoch_{self.current_epoch}"
+                save_name=f"{'validation' if validation else 'train'}_epoch_{self.current_epoch}",
             )
             # draw_bbx(
             #     img=test_img,
@@ -168,7 +181,9 @@ class ModelMeta(LightningModule):
             #     num_of_patches=self.model.num_of_patches
             # )
             # gt_bbx2 = reduce_bounding_boxes(ground_truth_boxes)[:, 1:].to(ground_truth_boxes.device)
-            gt_bbx = self.model.reduce_bounding_boxes(ground_truth_boxes)[:, 1:].to(ground_truth_boxes.device)
+            gt_bbx = self.model.reduce_bounding_boxes(ground_truth_boxes)[:, 1:].to(
+                ground_truth_boxes.device
+            )
             # gt_bbx = gt_bbxs[i][:, 1:]
             pred_bbx = self.model.reduce_bounding_boxes(predicted_boxes)
 
@@ -224,26 +239,57 @@ class ModelMeta(LightningModule):
         return step_outputs
 
     def format_metrics(self, epoch_outputs, training=True):
-        step_str = 'training' if training else 'validation'
+        step_str = "training" if training else "validation"
         epoch_metrics = {}
         loss = torch.mean(torch.tensor([e["loss"] for e in epoch_outputs]))
         epoch_metrics["loss"] = loss
         total_iou = torch.mean(torch.tensor([e["total_iou"] for e in epoch_outputs]))
         epoch_metrics["total_iou"] = total_iou
-        total_recall = torch.mean(torch.tensor([e["total_recall"] for e in epoch_outputs]))
+        total_recall = torch.mean(
+            torch.tensor([e["total_recall"] for e in epoch_outputs])
+        )
         epoch_metrics["total_recall"] = total_recall
-        total_precision = torch.mean(torch.tensor([e["total_precision"] for e in epoch_outputs]))
+        total_precision = torch.mean(
+            torch.tensor([e["total_precision"] for e in epoch_outputs])
+        )
         epoch_metrics["total_precision"] = total_precision
         f1_score = 2 * total_precision * total_recall / (total_precision + total_recall)
         epoch_metrics["f1_score"] = f1_score
         self.log("loss", loss, prog_bar=True, logger=True, on_epoch=True)
         self.log(f"{step_str} loss", loss, prog_bar=True, logger=True, on_epoch=True)
-        self.log(f"{step_str} iou", epoch_metrics['total_iou'], prog_bar=True, logger=True, on_epoch=True)
-        self.log(f"{step_str} recall", epoch_metrics['total_recall'], prog_bar=True, logger=True, on_epoch=True)
-        self.log(f"{step_str} precision", epoch_metrics['total_precision'], prog_bar=True, logger=True, on_epoch=True)
-        self.log(f"{step_str} f1_score", epoch_metrics['f1_score'], prog_bar=True, logger=True, on_epoch=True)
+        self.log(
+            f"{step_str} iou",
+            epoch_metrics["total_iou"],
+            prog_bar=True,
+            logger=True,
+            on_epoch=True,
+        )
+        self.log(
+            f"{step_str} recall",
+            epoch_metrics["total_recall"],
+            prog_bar=True,
+            logger=True,
+            on_epoch=True,
+        )
+        self.log(
+            f"{step_str} precision",
+            epoch_metrics["total_precision"],
+            prog_bar=True,
+            logger=True,
+            on_epoch=True,
+        )
+        self.log(
+            f"{step_str} f1_score",
+            epoch_metrics["f1_score"],
+            prog_bar=True,
+            logger=True,
+            on_epoch=True,
+        )
         if training:
-            print(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']}", end=" ")
+            print(
+                f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']}",
+                end=" ",
+            )
         print(f"\n{step_str}, loss: {epoch_metrics['loss']:5.3f}", end=" ")
 
         if not training:
@@ -251,14 +297,19 @@ class ModelMeta(LightningModule):
         else:
             out = self.log_path
             with out.open("a") as fp:
-                fp.write(f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']} ")
-                fp.write(f"training, loss: {epoch_metrics['loss']:5.3f}, iou: {epoch_metrics['total_iou']:5.3f},"
-                         f"recall {epoch_metrics['total_recall']:5.3f}, precision {epoch_metrics['total_precision']:5.3f}"
-                         f", f1_score {epoch_metrics['f1_score']:5.3f} ")
+                fp.write(
+                    f"\nEpoch: {self.current_epoch}, lr: {self.opt.param_groups[0]['lr']} "
+                )
+                fp.write(
+                    f"training, loss: {epoch_metrics['loss']:5.3f}, iou: {epoch_metrics['total_iou']:5.3f},"
+                    f"recall {epoch_metrics['total_recall']:5.3f}, precision {epoch_metrics['total_precision']:5.3f}"
+                    f", f1_score {epoch_metrics['f1_score']:5.3f} "
+                )
                 fp.write(
                     f"validation, loss: {self.epoch_metrics['loss']:5.3f}, iou: {self.epoch_metrics['total_iou']:5.3f},"
                     f" recall {self.epoch_metrics['total_recall']:5.3f}, precision {self.epoch_metrics['total_precision']:5.3f}"
-                    f", f1_score {self.epoch_metrics['f1_score']:5.3f} ")
+                    f", f1_score {self.epoch_metrics['f1_score']:5.3f} "
+                )
         return epoch_metrics
 
     def training_epoch_end(self, training_epoch_outputs):
@@ -269,4 +320,3 @@ class ModelMeta(LightningModule):
 
     def test_epoch_end(self, validation_epoch_outputs):
         self.format_metrics(validation_epoch_outputs, training=False)
-
