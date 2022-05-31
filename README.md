@@ -38,7 +38,7 @@ pip install -r requirements.txt
 ```
 2. Run the model
 ```bash
-python demo_scripts/demo_model_torch.py
+python demo_model.py
 ```
 
 ### Train a model
@@ -49,5 +49,5 @@ pip install -r requirements.txt
 ```
 2. Run the model
 ```bash
-python demo_scripts/demo_model_torch.py
+python train_model.py
 ```
