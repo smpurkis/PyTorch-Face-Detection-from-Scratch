@@ -42,7 +42,8 @@ python demo_model.py
 ```
 
 ### Train a model
-To run the medium PoolResnet Model:
+(Note: you'll need to install pytorch with cuda for training)
+To train the medium PoolResnet Model:
 1. Install the requirements
 ```bash
 pip install -r requirements.txt
