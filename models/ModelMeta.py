@@ -1,6 +1,5 @@
 from pathlib import Path
 
-# import closure as closure
 import torch
 from pytorch_lightning import LightningModule
 from torch.optim._multi_tensor import SGD, Adam
