@@ -11,10 +11,10 @@ from models.Resnet import Resnet
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ""
 
-num_of_patches = 15
+num_of_patches = 10
 input_shape = (480, 480)
 
-model = MobilenetV3Backbone(
+model = PoolResnet(
     filters=128,
     input_shape=(3, *input_shape),
     num_of_patches=num_of_patches,
@@ -24,14 +24,14 @@ model_setup = ModelMeta(
     lr=1e-4
 )
 
-# checkpoint = torch.load("lightning_logs/custom_poolresnet_128_10x10_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt",
-#                         map_location=torch.device("cpu"))
+checkpoint = torch.load("lightning_logs/custom_poolresnet_128_10x10_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt",
+                        map_location=torch.device("cpu"))
 # checkpoint = torch.load("lightning_logs/custom_poolresnet_64_10x10_480x480_sam_adam/checkpoints/epoch=69-step=56279.ckpt",
 #                         map_location=torch.device("cpu"))
 # checkpoint = torch.load("lightning_logs/custom_resnet_64_15x15_480x480_sam_adam/checkpoints/epoch=52-step=42611.ckpt",
 #                         map_location=torch.device("cpu"))
-checkpoint = torch.load("lightning_logs/pretrained_mobilenetv3backbone_576_15x15_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt",
-                        map_location=torch.device("cpu"))
+# checkpoint = torch.load("lightning_logs/pretrained_mobilenetv3backbone_576_15x15_480x480_sam_adam_all_data/checkpoints/epoch=69-step=112699.ckpt",
+#                         map_location=torch.device("cpu"))
 model_setup.load_state_dict(checkpoint["state_dict"])
 
 model.num_of_patches = num_of_patches

@@ -16,7 +16,7 @@ num_of_patches = 10
 input_shape = (480, 480)
 
 model = PoolResnet(
-    filters=64,
+    filters=128,
     input_shape=(3, *input_shape),
     num_of_patches=num_of_patches,
     num_of_residual_blocks=10
